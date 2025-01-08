@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use std::str;
+use std::str::{self, FromStr};
 use std::{env, path::Path};
 
 use pyo3::{
@@ -28,8 +28,6 @@ impl From<Description> for String {
     }
 }
 
-struct PytestStr(String);
-
 struct PytestInfo {
     test_path: String,
     pub test_name: String,
@@ -37,6 +35,11 @@ struct PytestInfo {
 }
 
 impl PytestInfo {
+    pub fn from_env() -> Result<Self, PyErr> {
+        let pytest_str = env::var("PYTEST_CURRENT_TEST").expect("PYTEST_CURRENT_TEST should be set");
+        pytest_str.parse()
+    }
+
     pub fn test_path(&self) -> PyResult<PathBuf> {
         let path = self.test_path_raw();
         if path.exists() {
@@ -55,20 +58,15 @@ impl PytestInfo {
     }
 }
 
-impl PytestStr {
-    pub fn from_env() -> Self {
-        Self(env::var("PYTEST_CURRENT_TEST").expect("PYTEST_CURRENT_TEST should be set"))
-    }
-}
+impl FromStr for PytestInfo {
+    type Err = PyErr;
 
-impl TryInto<PytestInfo> for PytestStr {
-    type Error = PyErr;
-    fn try_into(self) -> Result<PytestInfo, Self::Error> {
-        let re = regex::Regex::new(r"^(?P<test_path>(?:\/tests\/[^\/]+|tests\/[^\/]+)+\.py)::(?P<test_name>[\w_]+)\s\((?P<test_stage>setup|call|teardown)\)$").expect("Regex should be valid");
-        let Some(caps) = re.captures(&self.0) else {
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let re = regex::Regex::new(r"^(?P<test_path>(?:[^\/\\]+[\/\\])*\S+\.py)::(?P<test_name>[\w_]+)\s\((?P<test_stage>setup|call|teardown)\)$").expect("Regex should be valid");
+        let Some(caps) = re.captures(s) else {
             return Err(PyValueError::new_err(format!(
                 "PYTEST_CURRENT_TEST does not match expected format {}",
-                &self.0
+                s
             )));
         };
         Ok(PytestInfo {
@@ -95,8 +93,7 @@ impl TestInfo {
         snapshot_path_override: Option<PathBuf>,
         snapshot_name_override: Option<String>,
     ) -> PyResult<Self> {
-        let pytest_test_str = PytestStr::from_env();
-        let pytest_info: PytestInfo = pytest_test_str.try_into()?;
+        let pytest_info = PytestInfo::from_env()?;
         Ok(TestInfo {
             pytest_info,
             snapshot_path_override,
@@ -198,4 +195,18 @@ fn pysnaptest(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(assert_json_snapshot, m)?)?;
     m.add_function(wrap_pyfunction!(assert_csv_snapshot, m)?)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use pyo3::PyErr;
+
+    use crate::PytestInfo;
+
+    #[test]
+    fn test_into_pyinfo() {
+        let s = "tests/a/b/test_thing.py::test_a (call)";
+        let pti: Result<PytestInfo, PyErr> = s.parse();
+        assert!(pti.is_ok())
+    }
 }
