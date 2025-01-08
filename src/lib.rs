@@ -36,7 +36,8 @@ struct PytestInfo {
 
 impl PytestInfo {
     pub fn from_env() -> Result<Self, PyErr> {
-        let pytest_str = env::var("PYTEST_CURRENT_TEST").expect("PYTEST_CURRENT_TEST should be set");
+        let pytest_str =
+            env::var("PYTEST_CURRENT_TEST").expect("PYTEST_CURRENT_TEST should be set");
         pytest_str.parse()
     }
 
