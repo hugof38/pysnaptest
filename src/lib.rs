@@ -31,7 +31,6 @@ impl From<Description> for String {
 struct PytestInfo {
     test_path: String,
     pub test_name: String,
-    _test_stage: String,
 }
 
 impl PytestInfo {
@@ -63,18 +62,19 @@ impl FromStr for PytestInfo {
     type Err = PyErr;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let re = regex::Regex::new(r"^(?P<test_path>(?:[^\/\\]+[\/\\])*\S+\.py)::(?P<test_name>[\w_]+)\s\((?P<test_stage>setup|call|teardown)\)$").expect("Regex should be valid");
-        let Some(caps) = re.captures(s) else {
-            return Err(PyValueError::new_err(format!(
-                "PYTEST_CURRENT_TEST does not match expected format {}",
-                s
-            )));
-        };
-        Ok(PytestInfo {
-            test_name: caps["test_name"].to_string(),
-            test_path: caps["test_path"].to_string(),
-            _test_stage: caps["test_stage"].to_string(),
-        })
+        let mut parts = s.splitn(2, "::");
+        let opt_test_path = parts.next();
+        let opt_test_name = parts.next().and_then(|s| s.splitn(2, " ").next());
+        if let (Some(test_path), Some(test_name)) = (opt_test_path, opt_test_name) {
+            Ok(PytestInfo {
+                test_name: test_name.to_string(),
+                test_path: test_path.to_string(),
+            })
+        } else {
+            Err(PyValueError::new_err(format!(
+                "Unable to parse {s} into PytestInfo"
+            )))
+        }
     }
 }
 
