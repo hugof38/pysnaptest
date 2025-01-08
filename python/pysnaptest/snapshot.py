@@ -3,8 +3,6 @@ from ._pysnaptest import assert_json_snapshot as _assert_json_snapshot
 from ._pysnaptest import assert_csv_snapshot as _assert_csv_snapshot
 from ._pysnaptest import assert_snapshot as _assert_snapshot
 from ._pysnaptest import TestInfo
-import os
-import pathlib
 from typing import Callable, Any, overload, Union, TYPE_CHECKING
 from functools import partial, wraps
 import asyncio
@@ -14,25 +12,10 @@ if TYPE_CHECKING:
     import polars as pl
 
 
-def extract_snapshot_path(test_path: str) -> str:
-    test_path_file = pathlib.Path(test_path)
-    snapshot_dir = (
-        test_path_file.resolve()
-        if test_path_file.is_file()
-        else pathlib.Path(test_path.split("/")[-1]).resolve()
-    )
-    return str(snapshot_dir)
-
-
 def extract_from_pytest_env(
     snapshot_path: str | None = None, snapshot_name: str | None = None
 ) -> TestInfo:
-    current_test = os.environ.get("PYTEST_CURRENT_TEST")
-    (test_path, test_name) = current_test.split("::")
-
-    return TestInfo(
-        test_name=test_name,
-        test_path=extract_snapshot_path(test_path),
+    return TestInfo.from_pytest(
         snapshot_path_override=snapshot_path,
         snapshot_name_override=snapshot_name,
     )

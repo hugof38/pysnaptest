@@ -1,6 +1,6 @@
 ---
 source: src/lib.rs
-input_file: tests/test_snapshots.py
+description: "Test File Path: tests/test_snapshots.py"
 ---
 "foo,bar,ham
 1,6,a
