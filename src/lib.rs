@@ -64,7 +64,7 @@ impl FromStr for PytestInfo {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut parts = s.splitn(2, "::");
         let opt_test_path = parts.next();
-        let opt_test_name = parts.next().and_then(|s| s.splitn(2, " ").next());
+        let opt_test_name = parts.next().and_then(|s| s.split(" ").next());
         if let (Some(test_path), Some(test_name)) = (opt_test_path, opt_test_name) {
             Ok(PytestInfo {
                 test_name: test_name.to_string(),
