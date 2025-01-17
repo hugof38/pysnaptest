@@ -101,9 +101,7 @@ def insta_snapshot(
         assert_dataframe_snapshot(result, snapshot_path, snapshot_name, redactions)
     else:
         if redactions is not None:
-            raise ValueError(
-                "Redactions may only be used with json or csv snapshots."
-            )
+            raise ValueError("Redactions may only be used with json or csv snapshots.")
         assert_snapshot(result, snapshot_path, snapshot_name)
 
 
