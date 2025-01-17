@@ -4,7 +4,6 @@ from pysnaptest import (
     snapshot,
     assert_json_snapshot,
     assert_dataframe_snapshot,
-    assert_csv_snapshot,
 )
 import pytest
 
@@ -92,3 +91,15 @@ def test_snapshot_with_redactions():
         "level_one": "left_alone",
         "also_level_one": "should_be_redacted",
     }
+
+
+@pytest.mark.skipif(POLARS_UNAVAILABLE, reason="Polars is an optional dependency")
+@snapshot(redactions={"[1:][1]": "[redacted]"})
+def test_assert_polars_dataframe_snapshot_redactions() -> pl.DataFrame:
+    return pl.DataFrame(
+        {
+            "foo": [1, 2, 3, 4, 5],
+            "bar": [6, 7, 8, 9, 10],
+            "ham": ["a", "b", "c", "d", "e"],
+        }
+    )

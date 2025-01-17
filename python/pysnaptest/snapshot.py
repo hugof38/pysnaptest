@@ -32,10 +32,13 @@ def assert_json_snapshot(
 
 
 def assert_csv_snapshot(
-    result: Any, snapshot_path: str | None = None, snapshot_name: str | None = None
+    result: Any,
+    snapshot_path: str | None = None,
+    snapshot_name: str | None = None,
+    redactions: Dict[str, str] | None = None,
 ):
     test_info = extract_from_pytest_env(snapshot_path, snapshot_name)
-    _assert_csv_snapshot(test_info, result)
+    _assert_csv_snapshot(test_info, result, redactions)
 
 
 def try_is_pandas_df(maybe_df: Any) -> bool:
@@ -60,6 +63,7 @@ def assert_dataframe_snapshot(
     df: Union[pd.DataFrame, pl.DataFrame],
     snapshot_path: str | None = None,
     snapshot_name: str | None = None,
+    redactions: Dict[str, str] | None = None,
     *args,
     **kwargs,
 ):
@@ -75,7 +79,7 @@ def assert_dataframe_snapshot(
             "Unsupported dataframe type, only pandas and polars are supported. "
             "(We may also be unable to import both pandas and polars for some reason, but this is not likely)"
         )
-    assert_csv_snapshot(result, snapshot_path, snapshot_name)
+    assert_csv_snapshot(result, snapshot_path, snapshot_name, redactions)
 
 
 def assert_snapshot(
@@ -89,20 +93,17 @@ def insta_snapshot(
     result: Any,
     snapshot_path: str | None = None,
     snapshot_name: str | None = None,
-    redactions: Optional[Dict[str, str]] = None,
+    redactions: Dict[str, str] | None = None,
 ):
     if isinstance(result, dict) or isinstance(result, list):
         assert_json_snapshot(result, snapshot_path, snapshot_name, redactions)
-        return
-
-    if redactions is not None:
-        raise ValueError(
-            "Redactions may only be used with json snapshots. Pass a list or dict instead."
-        )
-
-    if try_is_pandas_df(result) or try_is_polars_df(result):
-        assert_dataframe_snapshot(result, snapshot_path, snapshot_name)
+    elif try_is_pandas_df(result) or try_is_polars_df(result):
+        assert_dataframe_snapshot(result, snapshot_path, snapshot_name, redactions)
     else:
+        if redactions is not None:
+            raise ValueError(
+                "Redactions may only be used with json snapshots. Pass a list or dict instead."
+            )
         assert_snapshot(result, snapshot_path, snapshot_name)
 
 

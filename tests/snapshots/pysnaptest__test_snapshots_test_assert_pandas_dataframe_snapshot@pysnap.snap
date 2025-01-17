@@ -2,7 +2,6 @@
 source: src/lib.rs
 description: "Test File Path: tests/test_snapshots.py"
 ---
-"name,id
+name,id
 foo,1
 bar,2
-"

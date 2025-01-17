@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::str::{self, FromStr};
 use std::{env, path::Path};
 
+use csv::ReaderBuilder;
 use pyo3::{
     exceptions::PyValueError,
     pyclass, pyfunction, pymethods, pymodule,
@@ -206,10 +207,22 @@ fn assert_json_snapshot(
 #[pyo3(signature = (test_info, result, redactions=None))]
 fn assert_csv_snapshot(
     test_info: &TestInfo,
-    result: &Bound<'_, PyAny>,
+    result: &str,
     redactions: Option<HashMap<String, String>>,
 ) -> PyResult<()> {
-    let res: serde_json::Value = pythonize::depythonize(result).unwrap();
+    let mut rdr = ReaderBuilder::new().from_reader(result.as_bytes());
+    let columns: Vec<Vec<serde_json::Value>> = vec![rdr
+        .headers()
+        .expect("Expects csv with headers")
+        .into_iter()
+        .map(|h| h.into())
+        .collect()];
+    let records = rdr
+        .into_deserialize()
+        .collect::<Result<Vec<Vec<serde_json::Value>>, _>>()
+        .expect("Failed to parse csv records");
+    let res: Vec<Vec<serde_json::Value>> = columns.into_iter().chain(records).collect();
+
     let snapshot_name = test_info.snapshot_name();
     let mut settings: insta::Settings = test_info.try_into()?;
 
