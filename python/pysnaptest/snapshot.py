@@ -3,7 +3,7 @@ from ._pysnaptest import assert_json_snapshot as _assert_json_snapshot
 from ._pysnaptest import assert_csv_snapshot as _assert_csv_snapshot
 from ._pysnaptest import assert_snapshot as _assert_snapshot
 from ._pysnaptest import TestInfo
-from typing import Callable, Any, Dict, Optional, overload, Union, TYPE_CHECKING
+from typing import Callable, Any, Dict, overload, Union, TYPE_CHECKING
 from functools import partial, wraps
 import asyncio
 
@@ -25,7 +25,7 @@ def assert_json_snapshot(
     result: Any,
     snapshot_path: str | None = None,
     snapshot_name: str | None = None,
-    redactions: Optional[Dict[str, str]] = None,
+    redactions: Dict[str, str] | None = None,
 ):
     test_info = extract_from_pytest_env(snapshot_path, snapshot_name)
     _assert_json_snapshot(test_info, result, redactions)
@@ -123,7 +123,7 @@ def snapshot(  # noqa: F811
     *,
     snapshot_path: str | None = None,
     snapshot_name: str | None = None,
-    redactions: Optional[Dict[str, str]] = None,
+    redactions: Dict[str, str] | None = None,
 ) -> Callable:
     if asyncio.iscoroutinefunction(func):
 
