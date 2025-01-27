@@ -1,0 +1,8 @@
+---
+source: src/lib.rs
+assertion_line: 234
+description: "Test File Path: tests/test_snapshots.py"
+---
+,name,id
+0,foo,1
+1,bar,2

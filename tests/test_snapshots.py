@@ -56,9 +56,28 @@ def test_assert_pandas_dataframe_snapshot():
     assert_dataframe_snapshot(df, index=False)
 
 
+@pytest.mark.skipif(PANDAS_UNAVAILABLE, reason="Pandas is an optional dependency")
+@snapshot(snapshot_format="parquet")
+def test_assert_pandas_dataframe_binary_snapshot():
+    df = pd.DataFrame({"name": ["foo", "bar"], "id": [1, 2]})
+    return assert_dataframe_snapshot(df)
+
+
 @pytest.mark.skipif(POLARS_UNAVAILABLE, reason="Polars is an optional dependency")
 @snapshot
 def test_assert_polars_dataframe_snapshot() -> pl.DataFrame:
+    return pl.DataFrame(
+        {
+            "foo": [1, 2, 3, 4, 5],
+            "bar": [6, 7, 8, 9, 10],
+            "ham": ["a", "b", "c", "d", "e"],
+        }
+    )
+
+
+@pytest.mark.skipif(POLARS_UNAVAILABLE, reason="Polars is an optional dependency")
+@snapshot(snapshot_format="bin")
+def test_assert_polars_dataframe_binary_snapshot() -> pl.DataFrame:
     return pl.DataFrame(
         {
             "foo": [1, 2, 3, 4, 5],
