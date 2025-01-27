@@ -237,6 +237,16 @@ fn assert_csv_snapshot(
 }
 
 #[pyfunction]
+fn assert_binary_snapshot(test_info: &TestInfo, extension: &str, result: Vec<u8>) -> PyResult<()> {
+    let snapshot_name = test_info.snapshot_name();
+    let settings: insta::Settings = test_info.try_into()?;
+    settings.bind(|| {
+        insta::assert_binary_snapshot!(format!("{snapshot_name}.{extension}").as_str(), result);
+    });
+    Ok(())
+}
+
+#[pyfunction]
 fn assert_snapshot(test_info: &TestInfo, result: &Bound<'_, PyAny>) -> PyResult<()> {
     let snapshot_name = test_info.snapshot_name();
     let settings: insta::Settings = test_info.try_into()?;
@@ -252,6 +262,7 @@ fn pysnaptest(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<TestInfo>()?;
 
     m.add_function(wrap_pyfunction!(assert_snapshot, m)?)?;
+    m.add_function(wrap_pyfunction!(assert_binary_snapshot, m)?)?;
     m.add_function(wrap_pyfunction!(assert_json_snapshot, m)?)?;
     m.add_function(wrap_pyfunction!(assert_csv_snapshot, m)?)?;
     Ok(())

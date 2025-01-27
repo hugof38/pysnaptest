@@ -1,0 +1,6 @@
+---
+source: src/lib.rs
+description: "Test File Path: tests/test_snapshots.py"
+extension: txt
+snapshot_kind: binary
+---

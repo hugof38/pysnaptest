@@ -4,6 +4,7 @@ from pysnaptest import (
     snapshot,
     assert_json_snapshot,
     assert_dataframe_snapshot,
+    assert_binary_snapshot,
 )
 import pytest
 
@@ -43,6 +44,10 @@ def test_assert_json_snapshot():
 
 def test_assert_snapshot():
     assert_json_snapshot("expected_result")
+
+
+def test_assert_binary_snapshot():
+    assert_binary_snapshot(b"expected_result", extension="txt")
 
 
 @pytest.mark.skipif(PANDAS_UNAVAILABLE, reason="Pandas is an optional dependency")

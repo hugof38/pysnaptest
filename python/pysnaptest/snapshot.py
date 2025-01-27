@@ -2,6 +2,7 @@ from __future__ import annotations
 from ._pysnaptest import assert_json_snapshot as _assert_json_snapshot
 from ._pysnaptest import assert_csv_snapshot as _assert_csv_snapshot
 from ._pysnaptest import assert_snapshot as _assert_snapshot
+from ._pysnaptest import assert_binary_snapshot as _assert_binary_snapshot
 from ._pysnaptest import TestInfo
 from typing import Callable, Any, Dict, overload, Union, Optional, TYPE_CHECKING
 from functools import partial, wraps
@@ -80,6 +81,16 @@ def assert_dataframe_snapshot(
             "(We may also be unable to import both pandas and polars for some reason, but this is not likely)"
         )
     assert_csv_snapshot(result, snapshot_path, snapshot_name, redactions)
+
+
+def assert_binary_snapshot(
+    result: bytes,
+    snapshot_path: str | None = None,
+    snapshot_name: str | None = None,
+    extension: str = "bin",
+):
+    test_info = extract_from_pytest_env(snapshot_path, snapshot_name)
+    _assert_binary_snapshot(test_info, extension, result)
 
 
 def assert_snapshot(

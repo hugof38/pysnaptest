@@ -1,6 +1,6 @@
 [package]
 name = "pysnaptest"
-version = "0.1.8"
+version = "0.1.9"
 edition = "2021"
 include = [
     "/pyproject.toml",
@@ -24,7 +24,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 csv = "1.3.1"
-insta = { version = "1.41", features = ["json", "csv", "redactions"] }
+insta = { version = "1.42", features = ["json", "csv", "redactions"] }
 pyo3 = { version = "0.23.1", features = ["generate-import-lib"] }
 pythonize = "0.23.0"
 serde = { version = "1.0.216", features = ["derive"] }
