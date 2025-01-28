@@ -5,3 +5,4 @@ maturin==1.8.1
 ruff==0.8.5
 pandas==2.2.3
 polars==1.18.0
+pyarrow==19.0.0

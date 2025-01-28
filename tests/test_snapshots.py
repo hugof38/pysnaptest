@@ -59,7 +59,7 @@ def test_assert_pandas_dataframe_snapshot():
 @pytest.mark.skipif(PANDAS_UNAVAILABLE, reason="Pandas is an optional dependency")
 @snapshot(snapshot_format="parquet")
 def test_assert_pandas_dataframe_binary_snapshot():
-    df = pd.DataFrame({"name": ["foo", "bar"], "id": [1, 2]})
+    df = pd.DataFrame({"name": ["foo", "test"], "id": [1, 2]})
     return df
 
 
