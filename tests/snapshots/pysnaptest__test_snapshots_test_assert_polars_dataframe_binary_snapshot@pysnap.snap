@@ -1,11 +1,6 @@
 ---
 source: src/lib.rs
-assertion_line: 234
 description: "Test File Path: tests/test_snapshots.py"
+extension: bin
+snapshot_kind: binary
 ---
-foo,bar,ham
-1,6,a
-2,7,b
-3,8,c
-4,9,d
-5,10,e

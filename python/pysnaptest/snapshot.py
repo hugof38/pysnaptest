@@ -60,7 +60,6 @@ def try_is_polars_df(maybe_df: Any) -> bool:
     return isinstance(maybe_df, pl.DataFrame)
 
 
-
 def assert_dataframe_snapshot(
     df: Union[pd.DataFrame, pl.DataFrame],
     snapshot_path: Optional[str] = None,
@@ -78,8 +77,10 @@ def assert_dataframe_snapshot(
             result = df.to_json(*args, **kwargs)
             assert_json_snapshot(result, snapshot_path, snapshot_name, redactions)
         elif snapshot_format == "parquet":
-            result = df.to_parquet(engine='pyarrow')
-            assert_binary_snapshot(result, snapshot_path, snapshot_name, redactions, extension=snapshot_format)
+            result = df.to_parquet(engine="pyarrow")
+            assert_binary_snapshot(
+                result, snapshot_path, snapshot_name, extension=snapshot_format
+            )
         else:
             raise ValueError(
                 "Unsupported snqpshot format for dataframes, supported formats are: 'csv', 'json', 'parquet'."
@@ -93,7 +94,9 @@ def assert_dataframe_snapshot(
             assert_json_snapshot(result, snapshot_path, snapshot_name, redactions)
         elif snapshot_format == "bin":
             result = df.serialize(format="binary", *args, **kwargs)
-            assert_binary_snapshot(result, snapshot_path, snapshot_name, redactions, extension=snapshot_format)
+            assert_binary_snapshot(
+                result, snapshot_path, snapshot_name, extension=snapshot_format
+            )
         else:
             raise ValueError(
                 "Unsupported snapshot format for polars dataframes, supported formats are: 'csv', 'json', 'bin'."
@@ -127,13 +130,18 @@ def insta_snapshot(
     snapshot_path: Optional[str] = None,
     snapshot_name: Optional[str] = None,
     redactions: Optional[Dict[str, str]] = None,
-    *args,
-    **kwargs
+    snapshot_format: str = "csv",
 ):
     if isinstance(result, dict) or isinstance(result, list):
         assert_json_snapshot(result, snapshot_path, snapshot_name, redactions)
+    elif isinstance(result, bytes):
+        assert_binary_snapshot(
+            result, snapshot_path, snapshot_name, extension=snapshot_format
+        )
     elif try_is_pandas_df(result) or try_is_polars_df(result):
-        assert_dataframe_snapshot(result, snapshot_path, snapshot_name, redactions, *args, **kwargs)
+        assert_dataframe_snapshot(
+            result, snapshot_path, snapshot_name, redactions, snapshot_format
+        )
     else:
         if redactions is not None:
             raise ValueError("Redactions may only be used with json or csv snapshots.")
@@ -146,7 +154,11 @@ def snapshot(func: Callable) -> Callable: ...
 
 @overload
 def snapshot(
-    *, filename: Optional[str] = None, folder_path: Optional[str] = None
+    *,
+    filename: Optional[str] = None,
+    folder_path: Optional[str] = None,
+    redactions: Optional[Dict[str, str]] = None,
+    snapshot_format: str = "csv",
 ) -> Callable:  # noqa: F811
     ...
 
@@ -157,7 +169,7 @@ def snapshot(  # noqa: F811
     snapshot_path: Optional[str] = None,
     snapshot_name: Optional[str] = None,
     redactions: Optional[Dict[str, str]] = None,
-    **snapshot_kwargs
+    snapshot_format: str = "csv",
 ) -> Callable:
     if asyncio.iscoroutinefunction(func):
 
@@ -168,7 +180,7 @@ def snapshot(  # noqa: F811
                 snapshot_path=snapshot_path,
                 snapshot_name=snapshot_name,
                 redactions=redactions,
-                **snapshot_kwargs
+                snapshot_format=snapshot_format,
             )
 
     else:
@@ -180,7 +192,7 @@ def snapshot(  # noqa: F811
                 snapshot_path=snapshot_path,
                 snapshot_name=snapshot_name,
                 redactions=redactions,
-                **snapshot_kwargs
+                snapshot_format=snapshot_format,
             )
 
     # Without arguments `func` is passed directly to the decorator
