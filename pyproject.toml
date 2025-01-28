@@ -14,6 +14,7 @@ dynamic = ["version"]
 
 [project.optional-dependencies]
 pandas = ["pandas>=0.12.0"]
+pyarrow = ["pyarrow>=19.0.0"]
 polars = ["polars>=0.18"]
 
 [tool.maturin]

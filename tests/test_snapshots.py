@@ -60,7 +60,7 @@ def test_assert_pandas_dataframe_snapshot():
 @snapshot(snapshot_format="parquet")
 def test_assert_pandas_dataframe_binary_snapshot():
     df = pd.DataFrame({"name": ["foo", "bar"], "id": [1, 2]})
-    return assert_dataframe_snapshot(df)
+    return df
 
 
 @pytest.mark.skipif(POLARS_UNAVAILABLE, reason="Polars is an optional dependency")

@@ -1,8 +1,6 @@
 ---
 source: src/lib.rs
-assertion_line: 234
 description: "Test File Path: tests/test_snapshots.py"
+extension: parquet
+snapshot_kind: binary
 ---
-,name,id
-0,foo,1
-1,bar,2
