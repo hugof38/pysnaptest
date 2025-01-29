@@ -60,6 +60,58 @@ def try_is_polars_df(maybe_df: Any) -> bool:
     return isinstance(maybe_df, pl.DataFrame)
 
 
+def assert_pandas_dataframe_snapshot(
+    df: pd.DataFrame,
+    snapshot_path: Optional[str] = None,
+    snapshot_name: Optional[str] = None,
+    redactions: Optional[Dict[str, str]] = None,
+    snapshot_format: str = "csv",
+    *args,
+    **kwargs,
+):
+    if snapshot_format == "csv":
+        result = df.to_csv(*args, **kwargs)
+        assert_csv_snapshot(result, snapshot_path, snapshot_name, redactions)
+    elif snapshot_format == "json":
+        result = df.to_json(*args, **kwargs)
+        assert_json_snapshot(result, snapshot_path, snapshot_name, redactions)
+    elif snapshot_format == "parquet":
+        result = df.to_parquet(engine="pyarrow")
+        assert_binary_snapshot(
+            result, snapshot_path, snapshot_name, extension=snapshot_format
+        )
+    else:
+        raise ValueError(
+            "Unsupported snqpshot format for dataframes, supported formats are: 'csv', 'json', 'parquet'."
+        )
+
+
+def assert_polars_dataframe_snapshot(
+    df: pl.DataFrame,
+    snapshot_path: Optional[str] = None,
+    snapshot_name: Optional[str] = None,
+    redactions: Optional[Dict[str, str]] = None,
+    snapshot_format: str = "csv",
+    *args,
+    **kwargs,
+):
+    if snapshot_format == "csv":
+        result = df.write_csv(*args, **kwargs)
+        assert_csv_snapshot(result, snapshot_path, snapshot_name, redactions)
+    elif snapshot_format == "json":
+        result = df.serialize(format=snapshot_format, *args, **kwargs)
+        assert_json_snapshot(result, snapshot_path, snapshot_name, redactions)
+    elif snapshot_format == "bin":
+        result = df.serialize(format="binary", *args, **kwargs)
+        assert_binary_snapshot(
+            result, snapshot_path, snapshot_name, extension=snapshot_format
+        )
+    else:
+        raise ValueError(
+            "Unsupported snapshot format for polars dataframes, supported formats are: 'csv', 'json', 'bin'."
+        )
+
+
 def assert_dataframe_snapshot(
     df: Union[pd.DataFrame, pl.DataFrame],
     snapshot_path: Optional[str] = None,
@@ -70,37 +122,25 @@ def assert_dataframe_snapshot(
     **kwargs,
 ):
     if try_is_pandas_df(df):
-        if snapshot_format == "csv":
-            result = df.to_csv(*args, **kwargs)
-            assert_csv_snapshot(result, snapshot_path, snapshot_name, redactions)
-        elif snapshot_format == "json":
-            result = df.to_json(*args, **kwargs)
-            assert_json_snapshot(result, snapshot_path, snapshot_name, redactions)
-        elif snapshot_format == "parquet":
-            result = df.to_parquet(engine="pyarrow")
-            assert_binary_snapshot(
-                result, snapshot_path, snapshot_name, extension=snapshot_format
-            )
-        else:
-            raise ValueError(
-                "Unsupported snqpshot format for dataframes, supported formats are: 'csv', 'json', 'parquet'."
-            )
+        assert_pandas_dataframe_snapshot(
+            df,
+            snapshot_path,
+            snapshot_name,
+            redactions,
+            snapshot_format,
+            *args,
+            **kwargs,
+        )
     elif try_is_polars_df(df):
-        if snapshot_format == "csv":
-            result = df.write_csv(*args, **kwargs)
-            assert_csv_snapshot(result, snapshot_path, snapshot_name, redactions)
-        elif snapshot_format == "json":
-            result = df.serialize(format=snapshot_format, *args, **kwargs)
-            assert_json_snapshot(result, snapshot_path, snapshot_name, redactions)
-        elif snapshot_format == "bin":
-            result = df.serialize(format="binary", *args, **kwargs)
-            assert_binary_snapshot(
-                result, snapshot_path, snapshot_name, extension=snapshot_format
-            )
-        else:
-            raise ValueError(
-                "Unsupported snapshot format for polars dataframes, supported formats are: 'csv', 'json', 'bin'."
-            )
+        assert_polars_dataframe_snapshot(
+            df,
+            snapshot_path,
+            snapshot_name,
+            redactions,
+            snapshot_format,
+            *args,
+            **kwargs,
+        )
     else:
         raise ValueError(
             "Unsupported dataframe type, only pandas and polars are supported. "
