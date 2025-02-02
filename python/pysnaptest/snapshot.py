@@ -198,7 +198,7 @@ def snapshot(
     filename: Optional[str] = None,
     folder_path: Optional[str] = None,
     redactions: Optional[Dict[str, str]] = None,
-    snapshot_format: str = "csv",
+    dataframe_snapshot_format: str = "csv",
 ) -> Callable:  # noqa: F811
     ...
 
