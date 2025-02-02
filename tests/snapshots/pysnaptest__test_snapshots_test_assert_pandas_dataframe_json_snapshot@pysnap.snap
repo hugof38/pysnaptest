@@ -1,0 +1,14 @@
+---
+source: src/lib.rs
+description: "Test File Path: tests/test_snapshots.py"
+---
+{
+  "id": [
+    1,
+    2
+  ],
+  "name": [
+    "foo",
+    "bar"
+  ]
+}

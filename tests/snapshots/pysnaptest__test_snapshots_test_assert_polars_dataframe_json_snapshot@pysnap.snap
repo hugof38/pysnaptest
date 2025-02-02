@@ -1,0 +1,27 @@
+---
+source: src/lib.rs
+description: "Test File Path: tests/test_snapshots.py"
+---
+{
+  "bar": [
+    6,
+    7,
+    8,
+    9,
+    10
+  ],
+  "foo": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "ham": [
+    "a",
+    "b",
+    "c",
+    "d",
+    "e"
+  ]
+}

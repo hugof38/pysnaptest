@@ -57,8 +57,15 @@ def test_assert_pandas_dataframe_snapshot():
 
 
 @pytest.mark.skipif(PANDAS_UNAVAILABLE, reason="Pandas is an optional dependency")
-@snapshot(snapshot_format="parquet")
+@snapshot(dataframe_snapshot_format="parquet")
 def test_assert_pandas_dataframe_binary_snapshot():
+    df = pd.DataFrame({"name": ["foo", "bar"], "id": [1, 2]})
+    return df
+
+
+@pytest.mark.skipif(PANDAS_UNAVAILABLE, reason="Pandas is an optional dependency")
+@snapshot(dataframe_snapshot_format="json")
+def test_assert_pandas_dataframe_json_snapshot():
     df = pd.DataFrame({"name": ["foo", "bar"], "id": [1, 2]})
     return df
 
@@ -76,8 +83,20 @@ def test_assert_polars_dataframe_snapshot() -> pl.DataFrame:
 
 
 @pytest.mark.skipif(POLARS_UNAVAILABLE, reason="Polars is an optional dependency")
-@snapshot(snapshot_format="bin")
+@snapshot(dataframe_snapshot_format="bin")
 def test_assert_polars_dataframe_binary_snapshot() -> pl.DataFrame:
+    return pl.DataFrame(
+        {
+            "foo": [1, 2, 3, 4, 5],
+            "bar": [6, 7, 8, 9, 10],
+            "ham": ["a", "b", "c", "d", "e"],
+        }
+    )
+
+
+@pytest.mark.skipif(POLARS_UNAVAILABLE, reason="Polars is an optional dependency")
+@snapshot(dataframe_snapshot_format="json")
+def test_assert_polars_dataframe_json_snapshot() -> pl.DataFrame:
     return pl.DataFrame(
         {
             "foo": [1, 2, 3, 4, 5],

@@ -65,20 +65,20 @@ def assert_pandas_dataframe_snapshot(
     snapshot_path: Optional[str] = None,
     snapshot_name: Optional[str] = None,
     redactions: Optional[Dict[str, str]] = None,
-    snapshot_format: str = "csv",
+    dataframe_snapshot_format: str = "csv",
     *args,
     **kwargs,
 ):
-    if snapshot_format == "csv":
+    if dataframe_snapshot_format == "csv":
         result = df.to_csv(*args, **kwargs)
         assert_csv_snapshot(result, snapshot_path, snapshot_name, redactions)
-    elif snapshot_format == "json":
-        result = df.to_json(*args, **kwargs)
+    elif dataframe_snapshot_format == "json":
+        result = df.to_dict(orient="list", *args, **kwargs)
         assert_json_snapshot(result, snapshot_path, snapshot_name, redactions)
-    elif snapshot_format == "parquet":
+    elif dataframe_snapshot_format == "parquet":
         result = df.to_parquet(engine="pyarrow")
         assert_binary_snapshot(
-            result, snapshot_path, snapshot_name, extension=snapshot_format
+            result, snapshot_path, snapshot_name, extension=dataframe_snapshot_format
         )
     else:
         raise ValueError(
@@ -91,20 +91,20 @@ def assert_polars_dataframe_snapshot(
     snapshot_path: Optional[str] = None,
     snapshot_name: Optional[str] = None,
     redactions: Optional[Dict[str, str]] = None,
-    snapshot_format: str = "csv",
+    dataframe_snapshot_format: str = "csv",
     *args,
     **kwargs,
 ):
-    if snapshot_format == "csv":
+    if dataframe_snapshot_format == "csv":
         result = df.write_csv(*args, **kwargs)
         assert_csv_snapshot(result, snapshot_path, snapshot_name, redactions)
-    elif snapshot_format == "json":
-        result = df.serialize(format=snapshot_format, *args, **kwargs)
+    elif dataframe_snapshot_format == "json":
+        result = df.to_dict(as_series=False)
         assert_json_snapshot(result, snapshot_path, snapshot_name, redactions)
-    elif snapshot_format == "bin":
+    elif dataframe_snapshot_format == "bin":
         result = df.serialize(format="binary", *args, **kwargs)
         assert_binary_snapshot(
-            result, snapshot_path, snapshot_name, extension=snapshot_format
+            result, snapshot_path, snapshot_name, extension=dataframe_snapshot_format
         )
     else:
         raise ValueError(
@@ -117,7 +117,7 @@ def assert_dataframe_snapshot(
     snapshot_path: Optional[str] = None,
     snapshot_name: Optional[str] = None,
     redactions: Optional[Dict[str, str]] = None,
-    snapshot_format: str = "csv",
+    dataframe_snapshot_format: str = "csv",
     *args,
     **kwargs,
 ):
@@ -127,7 +127,7 @@ def assert_dataframe_snapshot(
             snapshot_path,
             snapshot_name,
             redactions,
-            snapshot_format,
+            dataframe_snapshot_format,
             *args,
             **kwargs,
         )
@@ -137,7 +137,7 @@ def assert_dataframe_snapshot(
             snapshot_path,
             snapshot_name,
             redactions,
-            snapshot_format,
+            dataframe_snapshot_format,
             *args,
             **kwargs,
         )
@@ -170,17 +170,17 @@ def insta_snapshot(
     snapshot_path: Optional[str] = None,
     snapshot_name: Optional[str] = None,
     redactions: Optional[Dict[str, str]] = None,
-    snapshot_format: str = "csv",
+    dataframe_snapshot_format: str = "csv",
 ):
     if isinstance(result, dict) or isinstance(result, list):
         assert_json_snapshot(result, snapshot_path, snapshot_name, redactions)
     elif isinstance(result, bytes):
         assert_binary_snapshot(
-            result, snapshot_path, snapshot_name, extension=snapshot_format
+            result, snapshot_path, snapshot_name, extension=dataframe_snapshot_format
         )
     elif try_is_pandas_df(result) or try_is_polars_df(result):
         assert_dataframe_snapshot(
-            result, snapshot_path, snapshot_name, redactions, snapshot_format
+            result, snapshot_path, snapshot_name, redactions, dataframe_snapshot_format
         )
     else:
         if redactions is not None:
@@ -209,7 +209,7 @@ def snapshot(  # noqa: F811
     snapshot_path: Optional[str] = None,
     snapshot_name: Optional[str] = None,
     redactions: Optional[Dict[str, str]] = None,
-    snapshot_format: str = "csv",
+    dataframe_snapshot_format: str = "csv",
 ) -> Callable:
     if asyncio.iscoroutinefunction(func):
 
@@ -220,7 +220,7 @@ def snapshot(  # noqa: F811
                 snapshot_path=snapshot_path,
                 snapshot_name=snapshot_name,
                 redactions=redactions,
-                snapshot_format=snapshot_format,
+                dataframe_snapshot_format=dataframe_snapshot_format,
             )
 
     else:
@@ -232,7 +232,7 @@ def snapshot(  # noqa: F811
                 snapshot_path=snapshot_path,
                 snapshot_name=snapshot_name,
                 redactions=redactions,
-                snapshot_format=snapshot_format,
+                dataframe_snapshot_format=dataframe_snapshot_format,
             )
 
     # Without arguments `func` is passed directly to the decorator
