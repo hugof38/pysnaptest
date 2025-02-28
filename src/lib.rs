@@ -189,7 +189,7 @@ impl TryInto<insta::Settings> for &TestInfo {
 
 #[derive(Debug)]
 pub enum RedactionType {
-    Sorted(),
+    Sorted,
     Rounded(usize),
     Standard(String),
 }
@@ -198,7 +198,7 @@ impl<'source> FromPyObject<'source> for RedactionType {
     #[inline]
     fn extract_bound(ob: &Bound<'source, PyAny>) -> PyResult<Self> {
         if ob.is_none() {
-            Ok(RedactionType::Sorted())
+            Ok(RedactionType::Sorted)
         } else if let Ok(decimals) = ob.extract::<usize>() {
             Ok(RedactionType::Rounded(decimals))
         } else if let Ok(redaction) = ob.extract::<String>() {
@@ -214,7 +214,7 @@ impl<'source> FromPyObject<'source> for RedactionType {
 impl From<RedactionType> for Redaction {
     fn from(value: RedactionType) -> Self {
         match value {
-            RedactionType::Sorted() => sorted_redaction(),
+            RedactionType::Sorted => sorted_redaction(),
             RedactionType::Rounded(decimals) => rounded_redaction(decimals),
             RedactionType::Standard(redaction) => redaction.into(),
         }
