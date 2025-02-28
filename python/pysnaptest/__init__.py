@@ -6,4 +6,6 @@ from .snapshot import (
     assert_snapshot,
     assert_dataframe_snapshot,
     assert_binary_snapshot,
+    sorted_redaction,
+    rounded_redaction,
 )

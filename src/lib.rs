@@ -5,6 +5,11 @@ use std::str::{self, FromStr};
 use std::{env, path::Path};
 
 use csv::ReaderBuilder;
+
+use insta::internals::Redaction;
+use insta::{rounded_redaction, sorted_redaction};
+use pyo3::types::PyAnyMethods;
+use pyo3::FromPyObject;
 use pyo3::{
     exceptions::PyValueError,
     pyclass, pyfunction, pymethods, pymodule,
@@ -182,12 +187,46 @@ impl TryInto<insta::Settings> for &TestInfo {
     }
 }
 
+#[derive(Debug)]
+pub enum RedactionType {
+    Sorted(),
+    Rounded(usize),
+    Standard(String),
+}
+
+impl<'source> FromPyObject<'source> for RedactionType {
+    #[inline]
+    fn extract_bound(ob: &Bound<'source, PyAny>) -> PyResult<Self> {
+        if ob.is_none() {
+            Ok(RedactionType::Sorted())
+        } else if let Ok(decimals) = ob.extract::<usize>() {
+            Ok(RedactionType::Rounded(decimals))
+        } else if let Ok(redaction) = ob.extract::<String>() {
+            Ok(RedactionType::Standard(redaction))
+        } else {
+            Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>(
+                "Unable to extract RedactionType",
+            ))
+        }
+    }
+}
+
+impl From<RedactionType> for Redaction {
+    fn from(value: RedactionType) -> Self {
+        match value {
+            RedactionType::Sorted() => sorted_redaction(),
+            RedactionType::Rounded(decimals) => rounded_redaction(decimals),
+            RedactionType::Standard(redaction) => redaction.into(),
+        }
+    }
+}
+
 #[pyfunction]
 #[pyo3(signature = (test_info, result, redactions=None))]
 fn assert_json_snapshot(
     test_info: &TestInfo,
     result: &Bound<'_, PyAny>,
-    redactions: Option<HashMap<String, String>>,
+    redactions: Option<HashMap<String, RedactionType>>,
 ) -> PyResult<()> {
     let res: serde_json::Value = pythonize::depythonize(result).unwrap();
     let snapshot_name = test_info.snapshot_name();
@@ -208,7 +247,7 @@ fn assert_json_snapshot(
 fn assert_csv_snapshot(
     test_info: &TestInfo,
     result: &str,
-    redactions: Option<HashMap<String, String>>,
+    redactions: Option<HashMap<String, RedactionType>>,
 ) -> PyResult<()> {
     let mut rdr = ReaderBuilder::new().from_reader(result.as_bytes());
     let columns: Vec<Vec<serde_json::Value>> = vec![rdr

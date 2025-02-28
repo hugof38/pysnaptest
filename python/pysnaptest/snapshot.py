@@ -13,6 +13,14 @@ if TYPE_CHECKING:
     import polars as pl
 
 
+def sorted_redaction():
+    return None
+
+
+def rounded_redaction(decimals: int) -> int:
+    return decimals
+
+
 def extract_from_pytest_env(
     snapshot_path: Optional[str] = None, snapshot_name: Optional[str] = None
 ) -> TestInfo:
@@ -26,7 +34,7 @@ def assert_json_snapshot(
     result: Any,
     snapshot_path: Optional[str] = None,
     snapshot_name: Optional[str] = None,
-    redactions: Optional[Dict[str, str]] = None,
+    redactions: Optional[Dict[str, str | int | None]] = None,
 ):
     test_info = extract_from_pytest_env(snapshot_path, snapshot_name)
     _assert_json_snapshot(test_info, result, redactions)
@@ -36,7 +44,7 @@ def assert_csv_snapshot(
     result: Any,
     snapshot_path: Optional[str] = None,
     snapshot_name: Optional[str] = None,
-    redactions: Optional[Dict[str, str]] = None,
+    redactions: Optional[Dict[str, str | int | None]] = None,
 ):
     test_info = extract_from_pytest_env(snapshot_path, snapshot_name)
     _assert_csv_snapshot(test_info, result, redactions)
@@ -64,7 +72,7 @@ def assert_pandas_dataframe_snapshot(
     df: pd.DataFrame,
     snapshot_path: Optional[str] = None,
     snapshot_name: Optional[str] = None,
-    redactions: Optional[Dict[str, str]] = None,
+    redactions: Optional[Dict[str, str | int | None]] = None,
     dataframe_snapshot_format: str = "csv",
     *args,
     **kwargs,
@@ -90,7 +98,7 @@ def assert_polars_dataframe_snapshot(
     df: pl.DataFrame,
     snapshot_path: Optional[str] = None,
     snapshot_name: Optional[str] = None,
-    redactions: Optional[Dict[str, str]] = None,
+    redactions: Optional[Dict[str, str | int | None]] = None,
     dataframe_snapshot_format: str = "csv",
     *args,
     **kwargs,
@@ -116,7 +124,7 @@ def assert_dataframe_snapshot(
     df: Union[pd.DataFrame, pl.DataFrame],
     snapshot_path: Optional[str] = None,
     snapshot_name: Optional[str] = None,
-    redactions: Optional[Dict[str, str]] = None,
+    redactions: Optional[Dict[str, str | int | None]] = None,
     dataframe_snapshot_format: str = "csv",
     *args,
     **kwargs,
@@ -169,7 +177,7 @@ def insta_snapshot(
     result: Any,
     snapshot_path: Optional[str] = None,
     snapshot_name: Optional[str] = None,
-    redactions: Optional[Dict[str, str]] = None,
+    redactions: Optional[Dict[str, str | int | None]] = None,
     dataframe_snapshot_format: str = "csv",
 ):
     if isinstance(result, dict) or isinstance(result, list):
@@ -197,7 +205,7 @@ def snapshot(
     *,
     filename: Optional[str] = None,
     folder_path: Optional[str] = None,
-    redactions: Optional[Dict[str, str]] = None,
+    redactions: Optional[Dict[str, str | int | None]] = None,
     dataframe_snapshot_format: str = "csv",
 ) -> Callable:  # noqa: F811
     ...
@@ -208,7 +216,7 @@ def snapshot(  # noqa: F811
     *,
     snapshot_path: Optional[str] = None,
     snapshot_name: Optional[str] = None,
-    redactions: Optional[Dict[str, str]] = None,
+    redactions: Optional[Dict[str, str | int | None]] = None,
     dataframe_snapshot_format: str = "csv",
 ) -> Callable:
     if asyncio.iscoroutinefunction(func):

@@ -1,0 +1,11 @@
+---
+source: src/lib.rs
+description: "Test File Path: tests/test_snapshots.py"
+---
+{
+  "test": [
+    1,
+    2,
+    4
+  ]
+}

@@ -6,6 +6,8 @@ from pysnaptest import (
     assert_json_snapshot,
     assert_dataframe_snapshot,
     assert_binary_snapshot,
+    sorted_redaction,
+    rounded_redaction,
 )
 import pytest
 
@@ -37,6 +39,16 @@ def test_snapshot_dict_result() -> dict[str, str]:
 @snapshot
 def test_snapshot_list_result() -> list[str]:
     return [1, 2, 4]
+
+
+@snapshot(redactions={".test": sorted_redaction()})
+def test_snapshot_sorted_redactions() -> list[str]:
+    return {"test": [1, 4, 2]}
+
+
+@snapshot(redactions={".test": rounded_redaction(2)})
+def test_snapshot_rounded_redactions() -> list[str]:
+    return {"test": 1.236789}
 
 
 def test_assert_json_snapshot():
