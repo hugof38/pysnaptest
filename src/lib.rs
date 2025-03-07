@@ -1,7 +1,8 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::env::VarError;
 use std::path::PathBuf;
 use std::str::{self, FromStr};
+use std::sync::Mutex;
 use std::{env, path::Path};
 
 use csv::ReaderBuilder;
@@ -10,6 +11,7 @@ use insta::internals::Redaction;
 use insta::{rounded_redaction, sorted_redaction};
 use pyo3::types::PyAnyMethods;
 use pyo3::FromPyObject;
+use once_cell::sync::Lazy;
 use pyo3::{
     exceptions::PyValueError,
     pyclass, pyfunction, pymethods, pymodule,
@@ -18,6 +20,9 @@ use pyo3::{
 };
 
 const PYSNAPSHOT_SUFFIX: &str = "pysnap";
+
+static TEST_NAME_COUNTERS: Lazy<Mutex<BTreeMap<String, usize>>> =
+    Lazy::new(|| Mutex::new(BTreeMap::new()));
 
 #[derive(Debug)]
 struct Description {
@@ -164,11 +169,24 @@ impl TestInfo {
         let test_name = &self.pytest_info.test_name;
         let test_path = self.pytest_info.test_path_raw();
         let file_name = test_path.file_stem().and_then(|s| s.to_str());
-        if let Some(f) = file_name {
+
+        let name = if let Some(f) = file_name {
             format!("{f}_{test_name}")
         } else {
             test_name.to_string()
-        }
+        };
+
+        // The following comes from https://github.com/mitsuhiko/insta/blob/master/insta/src/runtime.rs#L193 detect_snapshot_name
+        let mut counters = TEST_NAME_COUNTERS.lock().unwrap_or_else(|x| x.into_inner());
+        let test_idx = counters.get(&name).cloned().unwrap_or(0) + 1;
+        let rv = if test_idx == 1 {
+            name.to_string()
+        } else {
+            format!("{}-{}", name, test_idx)
+        };
+        counters.insert(name, test_idx);
+
+        rv
     }
 }
 
