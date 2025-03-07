@@ -8,7 +8,7 @@ from pysnaptest import (
     assert_binary_snapshot,
     sorted_redaction,
     rounded_redaction,
-    assert_snapshot
+    assert_snapshot,
 )
 import pytest
 

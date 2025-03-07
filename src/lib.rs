@@ -9,9 +9,9 @@ use csv::ReaderBuilder;
 
 use insta::internals::Redaction;
 use insta::{rounded_redaction, sorted_redaction};
+use once_cell::sync::Lazy;
 use pyo3::types::PyAnyMethods;
 use pyo3::FromPyObject;
-use once_cell::sync::Lazy;
 use pyo3::{
     exceptions::PyValueError,
     pyclass, pyfunction, pymethods, pymodule,
