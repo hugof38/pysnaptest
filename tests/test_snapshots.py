@@ -42,6 +42,7 @@ def test_snapshot_allow_duplicates():
     assert_snapshot("1", snapshot_name=snapshot_name, allow_duplicates=True)
     assert_snapshot("1", snapshot_name=snapshot_name, allow_duplicates=True)
 
+
 def test_snapshot_no_duplicate():
     snapshot_name = "test_snapshot_no_duplicate"
     assert_snapshot("1", snapshot_name=snapshot_name)
