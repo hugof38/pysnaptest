@@ -37,10 +37,15 @@ def test_snapshot_duplicates():
     assert_snapshot("2")
 
 
-def test_snapshot_duplicates_allow_when_named():
-    snapshot_name = "test_snapshot_duplicates_allow_when_named"
+def test_snapshot_allow_duplicates():
+    snapshot_name = "test_snapshot_allow_duplicates"
     assert_snapshot("1", snapshot_name=snapshot_name, allow_duplicates=True)
     assert_snapshot("1", snapshot_name=snapshot_name, allow_duplicates=True)
+
+def test_snapshot_no_duplicate():
+    snapshot_name = "test_snapshot_no_duplicate"
+    assert_snapshot("1", snapshot_name=snapshot_name)
+    assert_snapshot("1", snapshot_name=snapshot_name)
 
 
 @snapshot
