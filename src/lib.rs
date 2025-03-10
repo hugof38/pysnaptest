@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
 use std::env::VarError;
+use std::ops::Deref;
 use std::path::PathBuf;
 use std::str::{self, FromStr};
 use std::sync::Mutex;
@@ -7,7 +8,8 @@ use std::{env, path::Path};
 
 use csv::ReaderBuilder;
 
-use insta::internals::Redaction;
+use insta::internals::{Redaction, SnapshotContents};
+use insta::Snapshot;
 use insta::{rounded_redaction, sorted_redaction};
 use once_cell::sync::Lazy;
 use pyo3::types::PyAnyMethods;
@@ -116,58 +118,31 @@ impl FromStr for PytestInfo {
 }
 
 #[pyclass(frozen)]
-struct TestInfo {
-    pytest_info: PytestInfo,
-
-    snapshot_path_override: Option<PathBuf>,
-    snapshot_name_override: Option<String>,
+#[derive(Debug)]
+struct SnapshotInfo {
+    snapshot_path: PathBuf,
+    snapshot_name: String,
+    relative_test_file_path: Option<String>,
+    allow_duplicates: bool,
 }
 
-#[pymethods]
-impl TestInfo {
-    #[staticmethod]
-    #[pyo3(signature = (snapshot_path_override = None, snapshot_name_override = None))]
-    fn from_pytest(
-        snapshot_path_override: Option<PathBuf>,
-        snapshot_name_override: Option<String>,
-    ) -> PyResult<Self> {
-        let pytest_info = PytestInfo::from_env()?;
-        Ok(TestInfo {
-            pytest_info,
-            snapshot_path_override,
-            snapshot_name_override,
-        })
-    }
-
-    fn snapshot_path(&self) -> PyResult<PathBuf> {
-        if let Some(snapshot_path) = self.snapshot_path_override.clone() {
-            return Ok(snapshot_path);
-        }
-
-        let mut test_file_dir = self
-            .pytest_info
+impl TryFrom<PytestInfo> for SnapshotInfo {
+    type Error = PyErr;
+    fn try_from(value: PytestInfo) -> Result<Self, Self::Error> {
+        let test_file_dir = value
             .test_path()?
             .canonicalize()?
             .parent()
             .ok_or_else(|| {
                 PyValueError::new_err(format!(
                     "Invalid test_path: {:?}, not yielding a parent directory",
-                    self.pytest_info.test_path_raw()
+                    value.test_path_raw()
                 ))
             })?
-            .to_path_buf();
-        test_file_dir.push("snapshots");
+            .join("snapshots");
 
-        Ok(test_file_dir)
-    }
-
-    fn snapshot_name(&self) -> String {
-        if let Some(sno) = self.snapshot_name_override.as_ref() {
-            return sno.clone();
-        }
-
-        let test_name = &self.pytest_info.test_name;
-        let test_path = self.pytest_info.test_path_raw();
+        let test_name = &value.test_name;
+        let test_path = value.test_path_raw();
         let file_name = test_path.file_stem().and_then(|s| s.to_str());
 
         let name = if let Some(f) = file_name {
@@ -175,31 +150,86 @@ impl TestInfo {
         } else {
             test_name.to_string()
         };
+        Ok(Self {
+            snapshot_path: test_file_dir,
+            snapshot_name: name,
+            relative_test_file_path: Some(value.test_path()?.to_string_lossy().to_string()),
+            allow_duplicates: false,
+        })
+    }
+}
 
+#[pymethods]
+impl SnapshotInfo {
+    #[staticmethod]
+    #[pyo3(signature = (snapshot_path_override = None, snapshot_name_override = None, allow_duplicates = false))]
+    fn from_pytest(
+        snapshot_path_override: Option<PathBuf>,
+        snapshot_name_override: Option<String>,
+        allow_duplicates: bool,
+    ) -> PyResult<Self> {
+        Ok(
+            if let (Some(snapshot_path), Some(snapshot_name)) = (
+                snapshot_path_override.clone(),
+                snapshot_name_override.clone(),
+            ) {
+                Self {
+                    snapshot_path,
+                    snapshot_name,
+                    relative_test_file_path: None,
+                    allow_duplicates,
+                }
+            } else {
+                let pytest_info: SnapshotInfo = PytestInfo::from_env()?.try_into()?;
+                Self {
+                    snapshot_path: snapshot_path_override.unwrap_or(pytest_info.snapshot_path),
+                    snapshot_name: snapshot_name_override.unwrap_or(pytest_info.snapshot_name),
+                    relative_test_file_path: pytest_info.relative_test_file_path,
+                    allow_duplicates,
+                }
+            },
+        )
+    }
+
+    fn snapshot_path(&self) -> &PathBuf {
+        &self.snapshot_path
+    }
+
+    fn snapshot_name_view(&self) -> String {
+        self.snapshot_name(true)
+    }
+
+    fn snapshot_name(&self, view_only: bool) -> String {
+        if self.allow_duplicates {
+            return self.snapshot_name.to_string();
+        }
         // The following comes from https://github.com/mitsuhiko/insta/blob/master/insta/src/runtime.rs#L193 detect_snapshot_name
         let mut counters = TEST_NAME_COUNTERS.lock().unwrap_or_else(|x| x.into_inner());
-        let test_idx = counters.get(&name).cloned().unwrap_or(0) + 1;
+        let test_idx = counters.get(&self.snapshot_name).cloned().unwrap_or(0) + 1;
         let rv = if test_idx == 1 {
-            name.to_string()
+            self.snapshot_name.to_string()
         } else {
-            format!("{}-{}", name, test_idx)
+            format!("{}-{}", self.snapshot_name, test_idx)
         };
-        counters.insert(name, test_idx);
+
+        if !view_only {
+            counters.insert(self.snapshot_name.clone(), test_idx);
+        }
 
         rv
     }
 }
 
-impl TryInto<insta::Settings> for &TestInfo {
+impl TryInto<insta::Settings> for &SnapshotInfo {
     type Error = PyErr;
 
     fn try_into(self) -> PyResult<insta::Settings> {
         let mut settings = insta::Settings::clone_current();
-        settings.set_snapshot_path(self.snapshot_path()?);
+        settings.set_snapshot_path(self.snapshot_path());
         settings.set_snapshot_suffix(PYSNAPSHOT_SUFFIX);
-        settings.set_description(Description::new(
-            self.pytest_info.test_path()?.to_string_lossy().to_string(),
-        ));
+        if let Some(relative_test_file_path) = &self.relative_test_file_path {
+            settings.set_description(Description::new(relative_test_file_path.clone()));
+        }
         settings.set_omit_expression(true);
         Ok(settings)
     }
@@ -239,15 +269,38 @@ impl From<RedactionType> for Redaction {
     }
 }
 
+#[pyclass(unsendable)]
+#[derive(Debug)]
+pub struct PySnapshot(Snapshot);
+
+#[pymethods]
+impl PySnapshot {
+    #[staticmethod]
+    pub fn from_file(p: PathBuf) -> PyResult<Self> {
+        Ok(Self(Snapshot::from_file(&p).map_err(|e| {
+            PyValueError::new_err(format!("Unable to load snapshot from {p:?}, details: {e}",))
+        })?))
+    }
+
+    pub fn contents(&self) -> PyResult<Vec<u8>> {
+        Ok(match self.0.contents() {
+            SnapshotContents::Text(text_snapshot_contents) => {
+                text_snapshot_contents.to_string().as_bytes().to_vec()
+            }
+            SnapshotContents::Binary(items) => items.deref().to_owned(),
+        })
+    }
+}
+
 #[pyfunction]
 #[pyo3(signature = (test_info, result, redactions=None))]
 fn assert_json_snapshot(
-    test_info: &TestInfo,
+    test_info: &SnapshotInfo,
     result: &Bound<'_, PyAny>,
     redactions: Option<HashMap<String, RedactionType>>,
 ) -> PyResult<()> {
     let res: serde_json::Value = pythonize::depythonize(result).unwrap();
-    let snapshot_name = test_info.snapshot_name();
+    let snapshot_name = test_info.snapshot_name(false);
     let mut settings: insta::Settings = test_info.try_into()?;
 
     for (selector, redaction) in redactions.unwrap_or_default() {
@@ -263,7 +316,7 @@ fn assert_json_snapshot(
 #[pyfunction]
 #[pyo3(signature = (test_info, result, redactions=None))]
 fn assert_csv_snapshot(
-    test_info: &TestInfo,
+    test_info: &SnapshotInfo,
     result: &str,
     redactions: Option<HashMap<String, RedactionType>>,
 ) -> PyResult<()> {
@@ -280,7 +333,7 @@ fn assert_csv_snapshot(
         .expect("Failed to parse csv records");
     let res: Vec<Vec<serde_json::Value>> = columns.into_iter().chain(records).collect();
 
-    let snapshot_name = test_info.snapshot_name();
+    let snapshot_name = test_info.snapshot_name(false);
     let mut settings: insta::Settings = test_info.try_into()?;
 
     for (selector, redaction) in redactions.unwrap_or_default() {
@@ -294,8 +347,12 @@ fn assert_csv_snapshot(
 }
 
 #[pyfunction]
-fn assert_binary_snapshot(test_info: &TestInfo, extension: &str, result: Vec<u8>) -> PyResult<()> {
-    let snapshot_name = test_info.snapshot_name();
+fn assert_binary_snapshot(
+    test_info: &SnapshotInfo,
+    extension: &str,
+    result: Vec<u8>,
+) -> PyResult<()> {
+    let snapshot_name = test_info.snapshot_name(false);
     let settings: insta::Settings = test_info.try_into()?;
     settings.bind(|| {
         insta::assert_binary_snapshot!(format!("{snapshot_name}.{extension}").as_str(), result);
@@ -304,8 +361,8 @@ fn assert_binary_snapshot(test_info: &TestInfo, extension: &str, result: Vec<u8>
 }
 
 #[pyfunction]
-fn assert_snapshot(test_info: &TestInfo, result: &Bound<'_, PyAny>) -> PyResult<()> {
-    let snapshot_name = test_info.snapshot_name();
+fn assert_snapshot(test_info: &SnapshotInfo, result: &Bound<'_, PyAny>) -> PyResult<()> {
+    let snapshot_name = test_info.snapshot_name(false);
     let settings: insta::Settings = test_info.try_into()?;
     settings.bind(|| {
         insta::assert_snapshot!(snapshot_name, result);
@@ -316,12 +373,13 @@ fn assert_snapshot(test_info: &TestInfo, result: &Bound<'_, PyAny>) -> PyResult<
 #[pymodule]
 #[pyo3(name = "_pysnaptest")]
 fn pysnaptest(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_class::<TestInfo>()?;
+    m.add_class::<SnapshotInfo>()?;
 
     m.add_function(wrap_pyfunction!(assert_snapshot, m)?)?;
     m.add_function(wrap_pyfunction!(assert_binary_snapshot, m)?)?;
     m.add_function(wrap_pyfunction!(assert_json_snapshot, m)?)?;
     m.add_function(wrap_pyfunction!(assert_csv_snapshot, m)?)?;
+    m.add_class::<PySnapshot>()?;
     Ok(())
 }
 
@@ -329,7 +387,7 @@ fn pysnaptest(m: &Bound<'_, PyModule>) -> PyResult<()> {
 mod tests {
     use insta::assert_debug_snapshot;
 
-    use crate::{Error, PytestInfo};
+    use crate::{Error, PytestInfo, SnapshotInfo};
 
     #[test]
     fn test_into_pyinfo_happy_path() {
@@ -350,5 +408,15 @@ mod tests {
         let s = "tests/a/b/test_thing.py";
         let pti: Result<PytestInfo, Error> = s.parse();
         assert_debug_snapshot!(pti)
+    }
+
+    #[test]
+    fn test_snapshot_info_overrides_from_pytest() {
+        let snapshot_info = SnapshotInfo::from_pytest(
+            Some("folder_path_override".into()),
+            Some("snapshot_name_override".into()),
+            false,
+        );
+        assert_debug_snapshot!(snapshot_info)
     }
 }
