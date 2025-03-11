@@ -9,3 +9,4 @@ from .snapshot import (
     sorted_redaction,
     rounded_redaction,
 )
+from ._pysnaptest import PySnapshot
