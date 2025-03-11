@@ -1,6 +1,5 @@
 use std::collections::{BTreeMap, HashMap};
 use std::env::VarError;
-use std::ops::Deref;
 use std::path::PathBuf;
 use std::str::{self, FromStr};
 use std::sync::Mutex;
@@ -8,8 +7,7 @@ use std::{env, path::Path};
 
 use csv::ReaderBuilder;
 
-use insta::internals::{Redaction, SnapshotContents};
-use insta::Snapshot;
+use insta::internals::Redaction;
 use insta::{rounded_redaction, sorted_redaction};
 use once_cell::sync::Lazy;
 use pyo3::types::PyAnyMethods;
@@ -269,29 +267,6 @@ impl From<RedactionType> for Redaction {
     }
 }
 
-#[pyclass(unsendable)]
-#[derive(Debug)]
-pub struct PySnapshot(Snapshot);
-
-#[pymethods]
-impl PySnapshot {
-    #[staticmethod]
-    pub fn from_file(p: PathBuf) -> PyResult<Self> {
-        Ok(Self(Snapshot::from_file(&p).map_err(|e| {
-            PyValueError::new_err(format!("Unable to load snapshot from {p:?}, details: {e}",))
-        })?))
-    }
-
-    pub fn contents(&self) -> PyResult<Vec<u8>> {
-        Ok(match self.0.contents() {
-            SnapshotContents::Text(text_snapshot_contents) => {
-                text_snapshot_contents.to_string().as_bytes().to_vec()
-            }
-            SnapshotContents::Binary(items) => items.deref().to_owned(),
-        })
-    }
-}
-
 #[pyfunction]
 #[pyo3(signature = (test_info, result, redactions=None))]
 fn assert_json_snapshot(
@@ -379,7 +354,6 @@ fn pysnaptest(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(assert_binary_snapshot, m)?)?;
     m.add_function(wrap_pyfunction!(assert_json_snapshot, m)?)?;
     m.add_function(wrap_pyfunction!(assert_csv_snapshot, m)?)?;
-    m.add_class::<PySnapshot>()?;
     Ok(())
 }
 
