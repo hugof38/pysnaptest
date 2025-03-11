@@ -1,0 +1,5 @@
+---
+source: src/lib.rs
+description: "Test File Path: tests/test_snapshots.py"
+---
+"expected_result_1"

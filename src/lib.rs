@@ -3,7 +3,7 @@ use std::env::VarError;
 use std::ops::Deref;
 use std::path::PathBuf;
 use std::str::{self, FromStr};
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard};
 use std::{env, path::Path};
 
 use csv::ReaderBuilder;
@@ -163,33 +163,45 @@ impl TestInfo {
         Ok(test_file_dir)
     }
 
+    fn base_snapshot_name(&self) -> String {
+        let test_name = &self.pytest_info.test_name;
+        let test_path = self.pytest_info.test_path_raw();
+        let file_name = test_path.file_stem().and_then(|s| s.to_str());
+
+        if let Some(f) = file_name {
+            format!("{f}_{test_name}")
+        } else {
+            test_name.to_string()
+        }
+    }
+
     fn snapshot_name(&self) -> String {
         if let Some(sno) = self.snapshot_name_override.as_ref() {
             return sno.clone();
         }
 
-        let test_name = &self.pytest_info.test_name;
-        let test_path = self.pytest_info.test_path_raw();
-        let file_name = test_path.file_stem().and_then(|s| s.to_str());
+        let name = self.base_snapshot_name();
 
-        let name = if let Some(f) = file_name {
-            format!("{f}_{test_name}")
-        } else {
-            test_name.to_string()
-        };
-
-        // The following comes from https://github.com/mitsuhiko/insta/blob/master/insta/src/runtime.rs#L193 detect_snapshot_name
-        let mut counters = TEST_NAME_COUNTERS.lock().unwrap_or_else(|x| x.into_inner());
-        let test_idx = counters.get(&name).cloned().unwrap_or(0) + 1;
-        let rv = if test_idx == 1 {
-            name.to_string()
-        } else {
-            format!("{}-{}", name, test_idx)
-        };
-        counters.insert(name, test_idx);
+        let mut c = counters();
+        let test_idx = c.get(&name).cloned().unwrap_or(0) + 1;
+        let rv = snapshot_name_with_idx(&name, test_idx);
+        c.insert(name, test_idx);
 
         rv
     }
+}
+
+fn snapshot_name_with_idx(name: &str, test_idx: usize) -> String {
+    if test_idx == 1 {
+        name.to_string()
+    } else {
+        format!("{}-{}", name, test_idx)
+    }
+}
+
+// The following comes from https://github.com/mitsuhiko/insta/blob/master/insta/src/runtime.rs#L193 detect_snapshot_name
+fn counters<'a>() -> MutexGuard<'a, BTreeMap<String, usize>> {
+    TEST_NAME_COUNTERS.lock().unwrap_or_else(|x| x.into_inner())
 }
 
 impl TryInto<insta::Settings> for &TestInfo {
@@ -239,6 +251,24 @@ impl From<RedactionType> for Redaction {
             RedactionType::Standard(redaction) => redaction.into(),
         }
     }
+}
+
+#[pyfunction]
+fn last_snapshot_name() -> PyResult<String> {
+    let c = counters();
+    let base_snapshot_name =
+        TestInfo::from_pytest(Option::None, Option::None)?.base_snapshot_name();
+    let test_idx = c.get(&base_snapshot_name).cloned().unwrap_or(1);
+    Ok(snapshot_name_with_idx(&base_snapshot_name, test_idx))
+}
+
+#[pyfunction]
+fn next_snapshot_name() -> PyResult<String> {
+    let c = counters();
+    let base_snapshot_name =
+        TestInfo::from_pytest(Option::None, Option::None)?.base_snapshot_name();
+    let test_idx = c.get(&base_snapshot_name).cloned().unwrap_or(0) + 1;
+    Ok(snapshot_name_with_idx(&base_snapshot_name, test_idx))
 }
 
 #[pyclass(unsendable)]
@@ -347,6 +377,8 @@ fn pysnaptest(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(assert_binary_snapshot, m)?)?;
     m.add_function(wrap_pyfunction!(assert_json_snapshot, m)?)?;
     m.add_function(wrap_pyfunction!(assert_csv_snapshot, m)?)?;
+    m.add_function(wrap_pyfunction!(last_snapshot_name, m)?)?;
+    m.add_function(wrap_pyfunction!(next_snapshot_name, m)?)?;
     m.add_class::<PySnapshot>()?;
     Ok(())
 }

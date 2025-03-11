@@ -11,6 +11,10 @@ from pysnaptest import (
     rounded_redaction,
     assert_snapshot,
     PySnapshot,
+    last_snapshot_name,
+    next_snapshot_name,
+    last_snapshot_path,
+    next_snapshot_path,
 )
 import pytest
 
@@ -186,3 +190,20 @@ def test_snapshot_contents_json():
     )
     result = json.loads(snapshot.contents())
     assert_json_snapshot(result, snapshot_name=snapshot_name)
+
+
+def test_equivalent_to_allow_duplicate():
+    assert_json_snapshot("expected_result_1")
+    assert_json_snapshot("expected_result_1", snapshot_name=last_snapshot_name())
+
+
+def test_equivalent_to_allow_duplicate_or_from_the_front():
+    assert_json_snapshot("expected_result_1", snapshot_name=next_snapshot_name())
+    assert_json_snapshot("expected_result_1")
+
+
+def test_snapshot_then_load():
+    expected = "expected_result_1"
+    assert_json_snapshot(expected)
+    snapshot = PySnapshot.from_file(last_snapshot_path())
+    assert snapshot.decode() == expected

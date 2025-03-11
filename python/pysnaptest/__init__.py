@@ -8,5 +8,9 @@ from .snapshot import (
     assert_binary_snapshot,
     sorted_redaction,
     rounded_redaction,
+    last_snapshot_name,
+    next_snapshot_name,
+    last_snapshot_path,
+    next_snapshot_path,
 )
 from ._pysnaptest import PySnapshot
