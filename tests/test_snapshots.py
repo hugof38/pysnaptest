@@ -11,6 +11,7 @@ from pysnaptest import (
     rounded_redaction,
     assert_snapshot,
     PySnapshot,
+    extract_from_pytest_env,
 )
 import pytest
 
@@ -39,8 +40,14 @@ def test_snapshot_duplicates():
     assert_snapshot("2")
 
 
-def test_snapshot_duplicates_allow_when_named():
-    snapshot_name = "test_snapshot_duplicates_allow_when_named"
+def test_snapshot_allow_duplicates():
+    snapshot_name = "test_snapshot_allow_duplicates"
+    assert_snapshot("1", snapshot_name=snapshot_name, allow_duplicates=True)
+    assert_snapshot("1", snapshot_name=snapshot_name, allow_duplicates=True)
+
+
+def test_snapshot_no_duplicate():
+    snapshot_name = "test_snapshot_no_duplicate"
     assert_snapshot("1", snapshot_name=snapshot_name)
     assert_snapshot("1", snapshot_name=snapshot_name)
 
@@ -180,9 +187,14 @@ def test_assert_polars_dataframe_snapshot_redactions() -> pl.DataFrame:
 
 def test_snapshot_contents_json():
     snapshot_name = "test_snapshot_contents_json"
-    assert_json_snapshot({"test": "content"}, snapshot_name=snapshot_name)
+    assert_json_snapshot(
+        {"test": "content"}, snapshot_name=snapshot_name, allow_duplicates=True
+    )
+    test_info = extract_from_pytest_env(
+        snapshot_name=snapshot_name, allow_duplicates=True
+    )
     snapshot = PySnapshot.from_file(
-        r"tests/snapshots/pysnaptest__test_snapshot_contents_json@pysnap.snap"
+        rf"{test_info.snapshot_path()}/pysnaptest__{test_info.snapshot_name_view()}@pysnap.snap"
     )
     result = json.loads(snapshot.contents())
-    assert_json_snapshot(result, snapshot_name=snapshot_name)
+    assert_json_snapshot(result, snapshot_name=snapshot_name, allow_duplicates=True)
