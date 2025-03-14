@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::env::VarError;
 use std::path::PathBuf;
 use std::str::{self, FromStr};
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard};
 use std::{env, path::Path};
 
 use csv::ReaderBuilder;
@@ -155,6 +155,7 @@ impl TryFrom<PytestInfo> for SnapshotInfo {
     }
 }
 
+
 #[pymethods]
 impl SnapshotInfo {
     #[staticmethod]
@@ -188,26 +189,38 @@ impl SnapshotInfo {
         &self.snapshot_path
     }
 
-    fn snapshot_name_view(&self) -> String {
-        self.snapshot_name(true)
+    fn last_snapshot_name(&self) -> String {
+        let test_idx = Self::counters().get(&self.snapshot_name).cloned().unwrap_or(1);
+        self.snapshot_name_with_idx(test_idx)
     }
 
-    fn snapshot_name(&self, view_only: bool) -> String {
-        // The following comes from https://github.com/mitsuhiko/insta/blob/master/insta/src/runtime.rs#L193 detect_snapshot_name
-        let mut counters = TEST_NAME_COUNTERS.lock().unwrap_or_else(|x| x.into_inner());
-        let test_idx = counters.get(&self.snapshot_name).cloned().unwrap_or(0) + 1;
-        let rv = if test_idx == 1 {
+    fn next_snapshot_name(&self) -> String {
+        let test_idx = Self::counters().get(&self.snapshot_name).cloned().unwrap_or(0) + 1;
+        self.snapshot_name_with_idx(test_idx)
+    }
+}
+
+impl SnapshotInfo {
+    fn counters<'a>() -> MutexGuard<'a, BTreeMap<String, usize>> {
+        TEST_NAME_COUNTERS.lock().unwrap_or_else(|x| x.into_inner())
+    }
+
+    fn snapshot_name_with_idx(&self, test_idx: usize) -> String {
+        if test_idx == 1 {
             self.snapshot_name.to_string()
         } else {
             format!("{}-{}", self.snapshot_name, test_idx)
-        };
-
-        if !view_only {
-            counters.insert(self.snapshot_name.clone(), test_idx);
         }
-
-        rv
     }
+
+    fn snapshot_name(&self) -> String {
+        let mut c = Self::counters();
+        let test_idx = c.get(&self.snapshot_name).cloned().unwrap_or(0) + 1;
+        c.insert(self.snapshot_name.clone(), test_idx);
+
+        self.snapshot_name_with_idx(test_idx)
+    }
+
 }
 
 impl TryInto<insta::Settings> for &SnapshotInfo {
@@ -267,7 +280,7 @@ fn assert_json_snapshot(
     redactions: Option<HashMap<String, RedactionType>>,
 ) -> PyResult<()> {
     let res: serde_json::Value = pythonize::depythonize(result).unwrap();
-    let snapshot_name = test_info.snapshot_name(false);
+    let snapshot_name = test_info.snapshot_name();
     let mut settings: insta::Settings = test_info.try_into()?;
 
     for (selector, redaction) in redactions.unwrap_or_default() {
@@ -300,7 +313,7 @@ fn assert_csv_snapshot(
         .expect("Failed to parse csv records");
     let res: Vec<Vec<serde_json::Value>> = columns.into_iter().chain(records).collect();
 
-    let snapshot_name = test_info.snapshot_name(false);
+    let snapshot_name = test_info.snapshot_name();
     let mut settings: insta::Settings = test_info.try_into()?;
 
     for (selector, redaction) in redactions.unwrap_or_default() {
@@ -319,7 +332,7 @@ fn assert_binary_snapshot(
     extension: &str,
     result: Vec<u8>,
 ) -> PyResult<()> {
-    let snapshot_name = test_info.snapshot_name(false);
+    let snapshot_name = test_info.snapshot_name();
     let settings: insta::Settings = test_info.try_into()?;
     settings.bind(|| {
         insta::assert_binary_snapshot!(format!("{snapshot_name}.{extension}").as_str(), result);
@@ -329,7 +342,7 @@ fn assert_binary_snapshot(
 
 #[pyfunction]
 fn assert_snapshot(test_info: &SnapshotInfo, result: &Bound<'_, PyAny>) -> PyResult<()> {
-    let snapshot_name = test_info.snapshot_name(false);
+    let snapshot_name = test_info.snapshot_name();
     let settings: insta::Settings = test_info.try_into()?;
     settings.bind(|| {
         insta::assert_snapshot!(snapshot_name, result);

@@ -9,6 +9,7 @@ from pysnaptest import (
     sorted_redaction,
     rounded_redaction,
     assert_snapshot,
+    extract_from_pytest_env
 )
 import pytest
 
@@ -38,9 +39,10 @@ def test_snapshot_duplicates():
 
 
 def test_snapshot_allow_duplicates():
-    snapshot_name = "test_snapshot_allow_duplicates"
-    assert_snapshot("1", snapshot_name=snapshot_name)
-    assert_snapshot("1", snapshot_name=snapshot_name)
+    snapshot_info = extract_from_pytest_env()
+
+    assert_snapshot("1", snapshot_name=snapshot_info.next_snapshot_name())
+    assert_snapshot("1", snapshot_name=snapshot_info.last_snapshot_name())
 
 
 def test_snapshot_no_duplicate():
