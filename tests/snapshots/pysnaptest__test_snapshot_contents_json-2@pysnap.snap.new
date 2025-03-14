@@ -1,8 +1,0 @@
----
-source: src/lib.rs
-assertion_line: 331
-description: "Test File Path: tests/test_snapshots.py"
----
-{
-  "test": "content"
-}
