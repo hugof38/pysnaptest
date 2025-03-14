@@ -10,6 +10,7 @@ from pysnaptest import (
     sorted_redaction,
     rounded_redaction,
     assert_snapshot,
+    extract_from_pytest_env,
     PySnapshot,
 )
 import pytest
@@ -39,10 +40,13 @@ def test_snapshot_duplicates():
     assert_snapshot("2")
 
 
-def test_snapshot_duplicates_allow_when_named():
-    snapshot_name = "test_snapshot_duplicates_allow_when_named"
-    assert_snapshot("1", snapshot_name=snapshot_name)
-    assert_snapshot("1", snapshot_name=snapshot_name)
+def test_snapshot_allow_duplicates():
+    snapshot_info = extract_from_pytest_env()
+    assert_snapshot("1")
+    assert_snapshot("1", snapshot_name=snapshot_info.last_snapshot_name())
+    assert_snapshot(
+        "1", snapshot_name=snapshot_info.last_snapshot_name(), allow_duplicates=True
+    )
 
 
 @snapshot
@@ -185,4 +189,4 @@ def test_snapshot_contents_json():
         r"tests/snapshots/pysnaptest__test_snapshot_contents_json@pysnap.snap"
     )
     result = json.loads(snapshot.contents())
-    assert_json_snapshot(result, snapshot_name=snapshot_name)
+    assert_json_snapshot(result, snapshot_name=snapshot_name, allow_duplicates=True)
