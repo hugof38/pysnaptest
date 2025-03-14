@@ -1,0 +1,6 @@
+---
+source: src/lib.rs
+assertion_line: 335
+description: "Test File Path: tests/test_snapshots.py"
+---
+1

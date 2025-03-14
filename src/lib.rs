@@ -120,8 +120,7 @@ impl FromStr for PytestInfo {
 struct SnapshotInfo {
     snapshot_path: PathBuf,
     snapshot_name: String,
-    relative_test_file_path: Option<String>,
-    allow_duplicates: bool,
+    relative_test_file_path: Option<String>
 }
 
 impl TryFrom<PytestInfo> for SnapshotInfo {
@@ -151,8 +150,7 @@ impl TryFrom<PytestInfo> for SnapshotInfo {
         Ok(Self {
             snapshot_path: test_file_dir,
             snapshot_name: name,
-            relative_test_file_path: Some(value.test_path()?.to_string_lossy().to_string()),
-            allow_duplicates: false,
+            relative_test_file_path: Some(value.test_path()?.to_string_lossy().to_string())
         })
     }
 }
@@ -160,11 +158,10 @@ impl TryFrom<PytestInfo> for SnapshotInfo {
 #[pymethods]
 impl SnapshotInfo {
     #[staticmethod]
-    #[pyo3(signature = (snapshot_path_override = None, snapshot_name_override = None, allow_duplicates = false))]
+    #[pyo3(signature = (snapshot_path_override = None, snapshot_name_override = None))]
     fn from_pytest(
         snapshot_path_override: Option<PathBuf>,
-        snapshot_name_override: Option<String>,
-        allow_duplicates: bool,
+        snapshot_name_override: Option<String>
     ) -> PyResult<Self> {
         Ok(
             if let (Some(snapshot_path), Some(snapshot_name)) = (
@@ -174,16 +171,14 @@ impl SnapshotInfo {
                 Self {
                     snapshot_path,
                     snapshot_name,
-                    relative_test_file_path: None,
-                    allow_duplicates,
+                    relative_test_file_path: None
                 }
             } else {
                 let pytest_info: SnapshotInfo = PytestInfo::from_env()?.try_into()?;
                 Self {
                     snapshot_path: snapshot_path_override.unwrap_or(pytest_info.snapshot_path),
                     snapshot_name: snapshot_name_override.unwrap_or(pytest_info.snapshot_name),
-                    relative_test_file_path: pytest_info.relative_test_file_path,
-                    allow_duplicates,
+                    relative_test_file_path: pytest_info.relative_test_file_path
                 }
             },
         )
@@ -198,9 +193,6 @@ impl SnapshotInfo {
     }
 
     fn snapshot_name(&self, view_only: bool) -> String {
-        if self.allow_duplicates {
-            return self.snapshot_name.to_string();
-        }
         // The following comes from https://github.com/mitsuhiko/insta/blob/master/insta/src/runtime.rs#L193 detect_snapshot_name
         let mut counters = TEST_NAME_COUNTERS.lock().unwrap_or_else(|x| x.into_inner());
         let test_idx = counters.get(&self.snapshot_name).cloned().unwrap_or(0) + 1;
@@ -388,8 +380,7 @@ mod tests {
     fn test_snapshot_info_overrides_from_pytest() {
         let snapshot_info = SnapshotInfo::from_pytest(
             Some("folder_path_override".into()),
-            Some("snapshot_name_override".into()),
-            false,
+            Some("snapshot_name_override".into())
         );
         assert_debug_snapshot!(snapshot_info)
     }
