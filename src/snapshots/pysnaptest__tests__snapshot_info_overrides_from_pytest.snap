@@ -6,5 +6,5 @@ SnapshotInfo {
     snapshot_path: "folder_path_override",
     snapshot_name: "snapshot_name_override",
     relative_test_file_path: None,
-    allow_dupplicates: false,
+    allow_duplicates: false,
 }
