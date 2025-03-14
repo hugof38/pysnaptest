@@ -10,3 +10,4 @@ from .snapshot import (
     rounded_redaction,
     extract_from_pytest_env,
 )
+from ._pysnaptest import PySnapshot

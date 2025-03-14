@@ -1,5 +1,6 @@
 from __future__ import annotations
 import sys
+import json
 
 from pysnaptest import (
     snapshot,
@@ -10,6 +11,7 @@ from pysnaptest import (
     rounded_redaction,
     assert_snapshot,
     extract_from_pytest_env,
+    PySnapshot,
 )
 import pytest
 
@@ -178,3 +180,13 @@ def test_assert_polars_dataframe_snapshot_redactions() -> pl.DataFrame:
             "ham": ["a", "b", "c", "d", "e"],
         }
     )
+
+
+def test_snapshot_contents_json():
+    snapshot_name = "test_snapshot_contents_json"
+    assert_json_snapshot({"test": "content"}, snapshot_name=snapshot_name)
+    snapshot = PySnapshot.from_file(
+        r"tests/snapshots/pysnaptest__test_snapshot_contents_json@pysnap.snap"
+    )
+    result = json.loads(snapshot.contents())
+    assert_json_snapshot(result, snapshot_name=snapshot_name)
