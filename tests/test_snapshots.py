@@ -189,4 +189,4 @@ def test_snapshot_contents_json():
         r"tests/snapshots/pysnaptest__test_snapshot_contents_json@pysnap.snap"
     )
     result = json.loads(snapshot.contents())
-    assert_json_snapshot(result, snapshot_name=snapshot_name)
+    assert_json_snapshot(result, snapshot_name=snapshot_name, allow_duplicates=True)
