@@ -24,10 +24,12 @@ def rounded_redaction(decimals: int) -> int:
 def extract_from_pytest_env(
     snapshot_path: Optional[str] = None,
     snapshot_name: Optional[str] = None,
+    allow_duplicates: bool = False,
 ) -> SnapshotInfo:
     return SnapshotInfo.from_pytest(
         snapshot_path_override=snapshot_path,
-        snapshot_name_override=snapshot_name
+        snapshot_name_override=snapshot_name,
+        allow_duplicates=allow_duplicates,
     )
 
 
@@ -36,8 +38,9 @@ def assert_json_snapshot(
     snapshot_path: Optional[str] = None,
     snapshot_name: Optional[str] = None,
     redactions: Optional[Dict[str, str | int | None]] = None,
+    allow_duplicates: bool = False,
 ):
-    test_info = extract_from_pytest_env(snapshot_path, snapshot_name)
+    test_info = extract_from_pytest_env(snapshot_path, snapshot_name, allow_duplicates)
     _assert_json_snapshot(test_info, result, redactions)
 
 
@@ -46,8 +49,9 @@ def assert_csv_snapshot(
     snapshot_path: Optional[str] = None,
     snapshot_name: Optional[str] = None,
     redactions: Optional[Dict[str, str | int | None]] = None,
+    allow_duplicates: bool = False,
 ):
-    test_info = extract_from_pytest_env(snapshot_path, snapshot_name)
+    test_info = extract_from_pytest_env(snapshot_path, snapshot_name, allow_duplicates)
     _assert_csv_snapshot(test_info, result, redactions)
 
 
@@ -75,18 +79,19 @@ def assert_pandas_dataframe_snapshot(
     snapshot_name: Optional[str] = None,
     redactions: Optional[Dict[str, str | int | None]] = None,
     dataframe_snapshot_format: str = "csv",
+    allow_duplicates: bool = False,
     *args,
     **kwargs,
 ):
     if dataframe_snapshot_format == "csv":
         result = df.to_csv(*args, **kwargs)
         assert_csv_snapshot(
-            result, snapshot_path, snapshot_name, redactions
+            result, snapshot_path, snapshot_name, redactions, allow_duplicates
         )
     elif dataframe_snapshot_format == "json":
         result = df.to_dict(orient="list", *args, **kwargs)
         assert_json_snapshot(
-            result, snapshot_path, snapshot_name, redactions
+            result, snapshot_path, snapshot_name, redactions, allow_duplicates
         )
     elif dataframe_snapshot_format == "parquet":
         result = df.to_parquet(engine="pyarrow")
@@ -95,6 +100,7 @@ def assert_pandas_dataframe_snapshot(
             snapshot_path,
             snapshot_name,
             extension=dataframe_snapshot_format,
+            allow_duplicates=allow_duplicates,
         )
     else:
         raise ValueError(
@@ -108,18 +114,19 @@ def assert_polars_dataframe_snapshot(
     snapshot_name: Optional[str] = None,
     redactions: Optional[Dict[str, str | int | None]] = None,
     dataframe_snapshot_format: str = "csv",
+    allow_duplicates: bool = False,
     *args,
     **kwargs,
 ):
     if dataframe_snapshot_format == "csv":
         result = df.write_csv(*args, **kwargs)
         assert_csv_snapshot(
-            result, snapshot_path, snapshot_name, redactions
+            result, snapshot_path, snapshot_name, redactions, allow_duplicates
         )
     elif dataframe_snapshot_format == "json":
         result = df.to_dict(as_series=False)
         assert_json_snapshot(
-            result, snapshot_path, snapshot_name, redactions
+            result, snapshot_path, snapshot_name, redactions, allow_duplicates
         )
     elif dataframe_snapshot_format == "bin":
         result = df.serialize(format="binary", *args, **kwargs)
@@ -127,7 +134,8 @@ def assert_polars_dataframe_snapshot(
             result,
             snapshot_path,
             snapshot_name,
-            extension=dataframe_snapshot_format
+            extension=dataframe_snapshot_format,
+            allow_duplicates=allow_duplicates,
         )
     else:
         raise ValueError(
@@ -141,6 +149,7 @@ def assert_dataframe_snapshot(
     snapshot_name: Optional[str] = None,
     redactions: Optional[Dict[str, str | int | None]] = None,
     dataframe_snapshot_format: str = "csv",
+    allow_duplicates: bool = False,
     *args,
     **kwargs,
 ):
@@ -151,6 +160,7 @@ def assert_dataframe_snapshot(
             snapshot_name,
             redactions,
             dataframe_snapshot_format,
+            allow_duplicates,
             *args,
             **kwargs,
         )
@@ -161,6 +171,7 @@ def assert_dataframe_snapshot(
             snapshot_name,
             redactions,
             dataframe_snapshot_format,
+            allow_duplicates,
             *args,
             **kwargs,
         )
@@ -176,8 +187,9 @@ def assert_binary_snapshot(
     snapshot_path: str | None = None,
     snapshot_name: str | None = None,
     extension: str = "bin",
+    allow_duplicates: bool = False,
 ):
-    test_info = extract_from_pytest_env(snapshot_path, snapshot_name)
+    test_info = extract_from_pytest_env(snapshot_path, snapshot_name, allow_duplicates)
     _assert_binary_snapshot(test_info, extension, result)
 
 
@@ -185,8 +197,9 @@ def assert_snapshot(
     result: Any,
     snapshot_path: str | None = None,
     snapshot_name: str | None = None,
+    allow_duplicates: bool = False,
 ):
-    test_info = extract_from_pytest_env(snapshot_path, snapshot_name)
+    test_info = extract_from_pytest_env(snapshot_path, snapshot_name, allow_duplicates)
     _assert_snapshot(test_info, result)
 
 
@@ -196,6 +209,7 @@ def insta_snapshot(
     snapshot_name: Optional[str] = None,
     redactions: Optional[Dict[str, str | int | None]] = None,
     dataframe_snapshot_format: str = "csv",
+    allow_duplicates: bool = False,
 ):
     if isinstance(result, dict) or isinstance(result, list):
         assert_json_snapshot(result, snapshot_path, snapshot_name, redactions)
@@ -205,6 +219,7 @@ def insta_snapshot(
             snapshot_path,
             snapshot_name,
             extension=dataframe_snapshot_format,
+            allow_duplicates=allow_duplicates,
         )
     elif try_is_pandas_df(result) or try_is_polars_df(result):
         assert_dataframe_snapshot(
@@ -213,6 +228,7 @@ def insta_snapshot(
             snapshot_name,
             redactions,
             dataframe_snapshot_format,
+            allow_duplicates,
         )
     else:
         if redactions is not None:
@@ -231,6 +247,7 @@ def snapshot(
     folder_path: Optional[str] = None,
     redactions: Optional[Dict[str, str | int | None]] = None,
     dataframe_snapshot_format: str = "csv",
+    allow_duplicates: bool = False,
 ) -> Callable:  # noqa: F811
     ...
 
@@ -242,6 +259,7 @@ def snapshot(  # noqa: F811
     snapshot_name: Optional[str] = None,
     redactions: Optional[Dict[str, str | int | None]] = None,
     dataframe_snapshot_format: str = "csv",
+    allow_duplicates: bool = False,
 ) -> Callable:
     if asyncio.iscoroutinefunction(func):
 
@@ -253,6 +271,7 @@ def snapshot(  # noqa: F811
                 snapshot_name=snapshot_name,
                 redactions=redactions,
                 dataframe_snapshot_format=dataframe_snapshot_format,
+                allow_duplicates=allow_duplicates,
             )
 
     else:
@@ -265,6 +284,7 @@ def snapshot(  # noqa: F811
                 snapshot_name=snapshot_name,
                 redactions=redactions,
                 dataframe_snapshot_format=dataframe_snapshot_format,
+                allow_duplicates=allow_duplicates,
             )
 
     # Without arguments `func` is passed directly to the decorator

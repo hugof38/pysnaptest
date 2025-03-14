@@ -2,10 +2,9 @@
 source: src/lib.rs
 expression: snapshot_info
 ---
-Ok(
-    SnapshotInfo {
-        snapshot_path: "folder_path_override",
-        snapshot_name: "snapshot_name_override",
-        relative_test_file_path: None,
-    },
-)
+SnapshotInfo {
+    snapshot_path: "folder_path_override",
+    snapshot_name: "snapshot_name_override",
+    relative_test_file_path: None,
+    allow_dupplicates: false,
+}

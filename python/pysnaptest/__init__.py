@@ -8,5 +8,5 @@ from .snapshot import (
     assert_binary_snapshot,
     sorted_redaction,
     rounded_redaction,
-    extract_from_pytest_env
+    extract_from_pytest_env,
 )

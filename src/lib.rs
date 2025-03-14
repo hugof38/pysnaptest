@@ -120,7 +120,8 @@ impl FromStr for PytestInfo {
 struct SnapshotInfo {
     snapshot_path: PathBuf,
     snapshot_name: String,
-    relative_test_file_path: Option<String>
+    relative_test_file_path: Option<String>,
+    allow_duplicates: bool,
 }
 
 impl TryFrom<PytestInfo> for SnapshotInfo {
@@ -150,19 +151,20 @@ impl TryFrom<PytestInfo> for SnapshotInfo {
         Ok(Self {
             snapshot_path: test_file_dir,
             snapshot_name: name,
-            relative_test_file_path: Some(value.test_path()?.to_string_lossy().to_string())
+            relative_test_file_path: Some(value.test_path()?.to_string_lossy().to_string()),
+            allow_duplicates: false,
         })
     }
 }
 
-
 #[pymethods]
 impl SnapshotInfo {
     #[staticmethod]
-    #[pyo3(signature = (snapshot_path_override = None, snapshot_name_override = None))]
+    #[pyo3(signature = (snapshot_path_override = None, snapshot_name_override = None, allow_duplicates = false))]
     fn from_pytest(
         snapshot_path_override: Option<PathBuf>,
-        snapshot_name_override: Option<String>
+        snapshot_name_override: Option<String>,
+        allow_duplicates: bool,
     ) -> PyResult<Self> {
         Ok(
             if let (Some(snapshot_path), Some(snapshot_name)) = (
@@ -172,30 +174,41 @@ impl SnapshotInfo {
                 Self {
                     snapshot_path,
                     snapshot_name,
-                    relative_test_file_path: None
+                    relative_test_file_path: None,
+                    allow_duplicates,
                 }
             } else {
                 let pytest_info: SnapshotInfo = PytestInfo::from_env()?.try_into()?;
                 Self {
                     snapshot_path: snapshot_path_override.unwrap_or(pytest_info.snapshot_path),
-                    snapshot_name: snapshot_name_override.unwrap_or(pytest_info.snapshot_name),
-                    relative_test_file_path: pytest_info.relative_test_file_path
+                    snapshot_name: snapshot_name_override.map_or(pytest_info.snapshot_name, |v| {
+                        v.split('-').next().map_or(v.clone(), |s| s.to_string())
+                    }),
+                    relative_test_file_path: pytest_info.relative_test_file_path,
+                    allow_duplicates,
                 }
             },
         )
     }
 
-    fn snapshot_path(&self) -> &PathBuf {
+    pub fn snapshot_path(&self) -> &PathBuf {
         &self.snapshot_path
     }
 
-    fn last_snapshot_name(&self) -> String {
-        let test_idx = Self::counters().get(&self.snapshot_name).cloned().unwrap_or(1);
+    pub fn last_snapshot_name(&self) -> String {
+        let test_idx = Self::counters()
+            .get(&self.snapshot_name)
+            .cloned()
+            .unwrap_or(1);
         self.snapshot_name_with_idx(test_idx)
     }
 
-    fn next_snapshot_name(&self) -> String {
-        let test_idx = Self::counters().get(&self.snapshot_name).cloned().unwrap_or(0) + 1;
+    pub fn next_snapshot_name(&self) -> String {
+        let test_idx = Self::counters()
+            .get(&self.snapshot_name)
+            .cloned()
+            .unwrap_or(0)
+            + 1;
         self.snapshot_name_with_idx(test_idx)
     }
 }
@@ -215,12 +228,14 @@ impl SnapshotInfo {
 
     fn snapshot_name(&self) -> String {
         let mut c = Self::counters();
-        let test_idx = c.get(&self.snapshot_name).cloned().unwrap_or(0) + 1;
-        c.insert(self.snapshot_name.clone(), test_idx);
+        let mut test_idx = c.get(&self.snapshot_name).cloned().unwrap_or(0);
+        if !self.allow_duplicates {
+            test_idx += 1;
+            c.insert(self.snapshot_name.clone(), test_idx);
+        }
 
         self.snapshot_name_with_idx(test_idx)
     }
-
 }
 
 impl TryInto<insta::Settings> for &SnapshotInfo {
@@ -364,7 +379,6 @@ fn pysnaptest(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
 #[cfg(test)]
 mod tests {
-    use insta::assert_debug_snapshot;
 
     use crate::{Error, PytestInfo, SnapshotInfo};
 
@@ -372,29 +386,37 @@ mod tests {
     fn test_into_pyinfo_happy_path() {
         let s = "tests/a/b/test_thing.py::test_a (call)";
         let pti: Result<PytestInfo, Error> = s.parse();
-        assert_debug_snapshot!(pti)
+        insta::assert_debug_snapshot!(pti)
     }
 
     #[test]
     fn test_into_pyinfo_no_trailer() {
         let s = "tests/a/b/test_thing.py::test_a";
         let pti: Result<PytestInfo, Error> = s.parse();
-        assert_debug_snapshot!(pti)
+        insta::assert_debug_snapshot!(pti)
     }
 
     #[test]
     fn test_into_pyinfo_failure_case() {
         let s = "tests/a/b/test_thing.py";
         let pti: Result<PytestInfo, Error> = s.parse();
-        assert_debug_snapshot!(pti)
+        insta::assert_debug_snapshot!(pti)
     }
 
     #[test]
     fn test_snapshot_info_overrides_from_pytest() {
         let snapshot_info = SnapshotInfo::from_pytest(
             Some("folder_path_override".into()),
-            Some("snapshot_name_override".into())
-        );
-        assert_debug_snapshot!(snapshot_info)
+            Some("snapshot_name_override".into()),
+            false,
+        )
+        .unwrap();
+        insta::assert_debug_snapshot!(snapshot_info);
+        insta::assert_snapshot!(snapshot_info.snapshot_name(), @"snapshot_name_override");
+        insta::assert_snapshot!(snapshot_info.last_snapshot_name(), @"snapshot_name_override");
+        insta::assert_snapshot!(snapshot_info.next_snapshot_name(), @"snapshot_name_override-2");
+        insta::assert_snapshot!(snapshot_info.snapshot_name(), @"snapshot_name_override-2");
+        insta::assert_snapshot!(snapshot_info.last_snapshot_name(), @"snapshot_name_override-2");
+        insta::assert_snapshot!(snapshot_info.next_snapshot_name(), @"snapshot_name_override-3");
     }
 }
