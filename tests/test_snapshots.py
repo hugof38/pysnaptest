@@ -1,4 +1,5 @@
 from __future__ import annotations
+from pathlib import Path
 import sys
 import json
 
@@ -11,6 +12,11 @@ from pysnaptest import (
     rounded_redaction,
     assert_snapshot,
     PySnapshot,
+    last_snapshot_name,
+    next_snapshot_name,
+    snapshot_folder,
+    next_snapshot_path,
+    last_snapshot_path,
 )
 import pytest
 
@@ -186,3 +192,34 @@ def test_snapshot_contents_json():
     )
     result = json.loads(snapshot.contents())
     assert_json_snapshot(result, snapshot_name=snapshot_name)
+
+
+def test_equivalent_to_allow_duplicate():
+    assert_json_snapshot("expected_result_1")
+    assert_json_snapshot("expected_result_1", snapshot_name=last_snapshot_name())
+
+
+def test_equivalent_to_allow_duplicate_or_from_the_front():
+    assert_json_snapshot("expected_result_1", snapshot_name=next_snapshot_name())
+    assert_json_snapshot("expected_result_1")
+
+
+def test_snapshot_folder():
+    folder = snapshot_folder()
+    assert folder.exists()
+    assert folder == Path(__file__).parent / "snapshots"
+
+
+def test_save_snapshot_path_in_advance():
+    snapshot_that_will_be_created = next_snapshot_path()
+    expected = "expected_result_1"
+    assert_snapshot(expected)
+    snapshot = PySnapshot.from_file(snapshot_that_will_be_created)
+    assert snapshot.contents().decode() == expected
+
+
+def test_snapshot_then_load():
+    expected = "expected_result_1"
+    assert_snapshot(expected)
+    snapshot = PySnapshot.from_file(last_snapshot_path())
+    assert snapshot.contents().decode() == expected
