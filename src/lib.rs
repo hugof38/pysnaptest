@@ -120,7 +120,7 @@ impl FromStr for PytestInfo {
 #[pyclass(frozen)]
 #[derive(Debug)]
 struct SnapshotInfo {
-    snapshot_path: PathBuf,
+    snapshot_folder: PathBuf,
     snapshot_name: String,
     relative_test_file_path: Option<String>,
     allow_duplicates: bool,
@@ -151,7 +151,7 @@ impl TryFrom<PytestInfo> for SnapshotInfo {
             test_name.to_string()
         };
         Ok(Self {
-            snapshot_path: test_file_dir,
+            snapshot_folder: test_file_dir,
             snapshot_name: name,
             relative_test_file_path: Some(value.test_path()?.to_string_lossy().to_string()),
             allow_duplicates: false,
@@ -169,12 +169,12 @@ impl SnapshotInfo {
         allow_duplicates: bool,
     ) -> PyResult<Self> {
         Ok(
-            if let (Some(snapshot_path), Some(snapshot_name)) = (
+            if let (Some(snapshot_folder), Some(snapshot_name)) = (
                 snapshot_path_override.clone(),
                 snapshot_name_override.clone(),
             ) {
                 Self {
-                    snapshot_path,
+                    snapshot_folder,
                     snapshot_name,
                     relative_test_file_path: None,
                     allow_duplicates,
@@ -182,7 +182,7 @@ impl SnapshotInfo {
             } else {
                 let pytest_info: SnapshotInfo = PytestInfo::from_env()?.try_into()?;
                 Self {
-                    snapshot_path: snapshot_path_override.unwrap_or(pytest_info.snapshot_path),
+                    snapshot_folder: snapshot_path_override.unwrap_or(pytest_info.snapshot_folder),
                     snapshot_name: snapshot_name_override.map_or(pytest_info.snapshot_name, |v| {
                         v.split('-').next().map_or(v.clone(), |s| s.to_string())
                     }),
@@ -193,8 +193,8 @@ impl SnapshotInfo {
         )
     }
 
-    pub fn snapshot_path(&self) -> &PathBuf {
-        &self.snapshot_path
+    pub fn snapshot_folder(&self) -> &PathBuf {
+        &self.snapshot_folder
     }
 
     pub fn last_snapshot_name(&self) -> String {
@@ -212,6 +212,20 @@ impl SnapshotInfo {
             .unwrap_or(0)
             + 1;
         self.snapshot_name_with_idx(test_idx)
+    }
+
+    pub fn last_snapshot_path(&self) -> PyResult<PathBuf> {
+        Ok(self.snapshot_folder.join(format!(
+            "pysnaptest__{}@pysnap.snap",
+            self.last_snapshot_name()
+        )))
+    }
+
+    pub fn next_snapshot_path(&self) -> PyResult<PathBuf> {
+        Ok(self.snapshot_folder.join(format!(
+            "pysnaptest__{}@pysnap.snap",
+            self.next_snapshot_name()
+        )))
     }
 }
 
@@ -245,7 +259,7 @@ impl TryInto<insta::Settings> for &SnapshotInfo {
 
     fn try_into(self) -> PyResult<insta::Settings> {
         let mut settings = insta::Settings::clone_current();
-        settings.set_snapshot_path(self.snapshot_path());
+        settings.set_snapshot_path(self.snapshot_folder());
         settings.set_snapshot_suffix(PYSNAPSHOT_SUFFIX);
         if let Some(relative_test_file_path) = &self.relative_test_file_path {
             settings.set_description(Description::new(relative_test_file_path.clone()));
