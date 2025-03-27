@@ -60,7 +60,7 @@ def test_next_snapshot_allow_duplicates():
 
 def test_snapshot_folder():
     snapshot_info = extract_from_pytest_env()
-    folder = snapshot_info.snapshot_folder()
+    folder = Path(snapshot_info.snapshot_folder())
     assert folder.exists()
     assert folder == Path(__file__).parent / "snapshots"
 
