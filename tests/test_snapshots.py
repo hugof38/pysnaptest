@@ -1,4 +1,5 @@
 from __future__ import annotations
+from pathlib import Path
 import sys
 import json
 
@@ -10,6 +11,7 @@ from pysnaptest import (
     sorted_redaction,
     rounded_redaction,
     assert_snapshot,
+    extract_from_pytest_env,
     PySnapshot,
 )
 import pytest
@@ -39,10 +41,28 @@ def test_snapshot_duplicates():
     assert_snapshot("2")
 
 
-def test_snapshot_duplicates_allow_when_named():
-    snapshot_name = "test_snapshot_duplicates_allow_when_named"
-    assert_snapshot("1", snapshot_name=snapshot_name)
-    assert_snapshot("1", snapshot_name=snapshot_name)
+def test_last_snapshot_allow_duplicates():
+    snapshot_info = extract_from_pytest_env()
+    assert_snapshot("1")
+    assert_snapshot("1", snapshot_name=snapshot_info.last_snapshot_name())
+    assert_snapshot(
+        "1", snapshot_name=snapshot_info.last_snapshot_name(), allow_duplicates=True
+    )
+
+
+def test_next_snapshot_allow_duplicates():
+    snapshot_info = extract_from_pytest_env()
+    assert_snapshot("1", snapshot_name=snapshot_info.next_snapshot_name())
+    assert_snapshot(
+        "1", snapshot_name=snapshot_info.next_snapshot_name(), allow_duplicates=True
+    )
+
+
+def test_snapshot_folder():
+    snapshot_info = extract_from_pytest_env()
+    folder = Path(snapshot_info.snapshot_folder())
+    assert folder.exists()
+    assert folder == Path(__file__).parent / "snapshots"
 
 
 @snapshot
@@ -185,4 +205,19 @@ def test_snapshot_contents_json():
         r"tests/snapshots/pysnaptest__test_snapshot_contents_json@pysnap.snap"
     )
     result = json.loads(snapshot.contents())
-    assert_json_snapshot(result, snapshot_name=snapshot_name)
+    assert_json_snapshot(result, snapshot_name=snapshot_name, allow_duplicates=True)
+
+
+def test_save_snapshot_path_in_advance():
+    snapshot_that_will_be_created = extract_from_pytest_env().next_snapshot_path()
+    expected = "expected_result_1"
+    assert_snapshot(expected)
+    snapshot = PySnapshot.from_file(snapshot_that_will_be_created)
+    assert snapshot.contents().decode() == expected
+
+
+def test_snapshot_then_load():
+    expected = "expected_result_1"
+    assert_snapshot(expected)
+    snapshot = PySnapshot.from_file(extract_from_pytest_env().last_snapshot_path())
+    assert snapshot.contents().decode() == expected
