@@ -1,0 +1,10 @@
+---
+source: src/lib.rs
+expression: snapshot_info
+---
+SnapshotInfo {
+    snapshot_folder: "folder_path_override",
+    snapshot_name: "snapshot_name_override",
+    relative_test_file_path: None,
+    allow_duplicates: false,
+}
