@@ -8,7 +8,7 @@ use std::{env, path::Path};
 
 use csv::ReaderBuilder;
 
-use insta::internals::{Redaction, SnapshotContents};
+use insta::internals::{Content, Redaction, SnapshotContents};
 use insta::Snapshot;
 use insta::{rounded_redaction, sorted_redaction};
 use once_cell::sync::Lazy;
@@ -20,6 +20,8 @@ use pyo3::{
     types::{PyModule, PyModuleMethods},
     wrap_pyfunction, Bound, PyAny, PyErr, PyResult,
 };
+use serde::de::DeserializeOwned;
+use serde::Serialize;
 
 const PYSNAPSHOT_SUFFIX: &str = "pysnap";
 
@@ -402,6 +404,41 @@ fn assert_snapshot(test_info: &SnapshotInfo, result: &Bound<'_, PyAny>) -> PyRes
         insta::assert_snapshot!(snapshot_name, result);
     });
     Ok(())
+}
+
+fn snapshot_json_or_mock<I, O, F>(input: &I, f: F, info: &SnapshotInfo, redactions: Option<HashMap<String, RedactionType>>) -> Result<O, anyhow::Error>
+where
+    I: Serialize + std::fmt::Debug,
+    O: Serialize + DeserializeOwned,
+    F: FnOnce(&I) -> O,
+{
+    let snapshot_path = info.next_snapshot_path()?;
+
+    let snapshot_name = info.snapshot_name();
+    let mut settings: insta::Settings = info.try_into()?;
+
+    // Try to load existing snapshot via insta
+    if snapshot_path.exists() {
+        if let Ok(snapshot) = Snapshot::from_file(&snapshot_path) {
+            match snapshot.contents() {
+                SnapshotContents::Text(content) => return Ok(serde_json::from_str::<O>(&content.to_string())?),
+                SnapshotContents::Binary(items) => todo!(),
+            }
+        }
+    }
+
+    // Compute the result
+    let result = f(input);
+
+    for (selector, redaction) in redactions.unwrap_or_default() {
+        settings.add_redaction(selector.as_str(), redaction)
+    }
+
+    settings.bind(|| {
+        insta::assert_json_snapshot!(snapshot_name, result);
+    });
+
+    Ok(result)
 }
 
 #[pymodule]
