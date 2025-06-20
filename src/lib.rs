@@ -406,39 +406,46 @@ fn assert_snapshot(test_info: &SnapshotInfo, result: &Bound<'_, PyAny>) -> PyRes
     Ok(())
 }
 
-fn snapshot_json_or_mock<I, O, F>(input: &I, f: F, info: &SnapshotInfo, redactions: Option<HashMap<String, RedactionType>>) -> Result<O, anyhow::Error>
+fn create_snapshot_fn<I, O, F>(f: F) -> impl Fn(&I, &SnapshotInfo, Option<HashMap<String, RedactionType>>) -> Result<O, anyhow::Error>
 where
     I: Serialize + std::fmt::Debug,
     O: Serialize + DeserializeOwned,
-    F: FnOnce(&I) -> O,
+    F: FnOnce(&I) -> O + Clone,
 {
-    let snapshot_path = info.next_snapshot_path()?;
+    move |input: &I, info: &SnapshotInfo, redactions: Option<HashMap<String, RedactionType>>| {
+        let f = f.clone();
+        let snapshot_path = info.next_snapshot_path()?;
 
-    let snapshot_name = info.snapshot_name();
-    let mut settings: insta::Settings = info.try_into()?;
+        let snapshot_name = info.snapshot_name();
+        let mut settings: insta::Settings = info.try_into()?;
 
-    // Try to load existing snapshot via insta
-    if snapshot_path.exists() {
-        if let Ok(snapshot) = Snapshot::from_file(&snapshot_path) {
-            match snapshot.contents() {
-                SnapshotContents::Text(content) => return Ok(serde_json::from_str::<O>(&content.to_string())?),
-                SnapshotContents::Binary(items) => todo!(),
+        for (selector, redaction) in redactions.unwrap_or_default() {
+            settings.add_redaction(selector.as_str(), redaction)
+        }
+
+        settings.bind(|| {
+            insta::assert_json_snapshot!(format!("{snapshot_name}-request"), input);
+        });
+
+        // Try to load existing snapshot via insta
+        if snapshot_path.exists() {
+            match Snapshot::from_file(&snapshot_path)
+                .map_err(|e| anyhow::anyhow!(e.to_string()))?
+                .contents()
+            {
+                SnapshotContents::Text(content) => Ok(serde_json::from_str::<O>(&content.to_string())?),
+                SnapshotContents::Binary(_items) => Err(anyhow::anyhow!("Snapshot format not supported")),
             }
+        } else {
+            // Compute the result
+            let result = f(input);
+
+            settings.bind(|| {
+                insta::assert_json_snapshot!(snapshot_name, result);
+            });
+            Ok(result)
         }
     }
-
-    // Compute the result
-    let result = f(input);
-
-    for (selector, redaction) in redactions.unwrap_or_default() {
-        settings.add_redaction(selector.as_str(), redaction)
-    }
-
-    settings.bind(|| {
-        insta::assert_json_snapshot!(snapshot_name, result);
-    });
-
-    Ok(result)
 }
 
 #[pymodule]
@@ -457,7 +464,11 @@ fn pysnaptest(m: &Bound<'_, PyModule>) -> PyResult<()> {
 #[cfg(test)]
 mod tests {
 
-    use crate::{Error, PytestInfo, SnapshotInfo};
+    use std::path::{Path, PathBuf};
+
+    use serde::{Deserialize, Serialize};
+
+    use crate::{create_snapshot_fn, Error, PytestInfo, SnapshotInfo};
 
     #[test]
     fn test_into_pyinfo_happy_path() {
@@ -495,5 +506,45 @@ mod tests {
         insta::assert_snapshot!(snapshot_info.snapshot_name(), @"snapshot_name_override-2");
         insta::assert_snapshot!(snapshot_info.last_snapshot_name(), @"snapshot_name_override-2");
         insta::assert_snapshot!(snapshot_info.next_snapshot_name(), @"snapshot_name_override-3");
+    }
+
+    #[derive(Debug, Serialize, Deserialize, PartialEq)]
+    struct Input {
+        val: i32,
+    }
+
+    #[derive(Debug, Serialize, Deserialize, PartialEq)]
+    struct Output {
+        double: i32,
+    }
+
+    fn snapshot_folder_path() -> PathBuf {
+        // This env var points to the root of your crate during cargo test/build
+        let crate_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        crate_root.join("src").join("snapshots")
+    }
+
+    #[test]
+    fn test_snapshot_json_or_mock_creates_and_reads_snapshot() -> Result<(), anyhow::Error> {
+        let input_1 = Input { val: 4 };
+        let f = |i: &Input| {
+            println!("This should not be called");
+            Output { double: i.val * 2 }
+        };
+
+        let snapshot_info = SnapshotInfo {
+            snapshot_folder: snapshot_folder_path(),
+            snapshot_name: "test_snapshot".to_string(),
+            relative_test_file_path: None,
+            allow_duplicates: false,
+        };
+
+        let snapshot_json_or_mock = create_snapshot_fn(f);
+
+        let result_1 = snapshot_json_or_mock(&input_1, &snapshot_info, None)?;
+        insta::assert_json_snapshot!(result_1);
+        let result_2 = snapshot_json_or_mock(&input_1, &snapshot_info, None)?;
+        insta::assert_json_snapshot!(result_2);
+        Ok(())
     }
 }
