@@ -1,7 +1,0 @@
----
-source: src/lib.rs
-expression: result
----
-{
-  "double": 8
-}

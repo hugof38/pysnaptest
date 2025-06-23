@@ -8,12 +8,12 @@ use std::{env, path::Path};
 
 use csv::ReaderBuilder;
 
-use insta::internals::{Content, Redaction, SnapshotContents};
+use insta::internals::{Redaction, SnapshotContents};
 use insta::Snapshot;
 use insta::{rounded_redaction, sorted_redaction};
 use once_cell::sync::Lazy;
 use pyo3::types::PyAnyMethods;
-use pyo3::FromPyObject;
+use pyo3::{FromPyObject, PyObject, Python};
 use pyo3::{
     exceptions::PyValueError,
     pyclass, pyfunction, pymethods, pymodule,
@@ -120,7 +120,7 @@ impl FromStr for PytestInfo {
 }
 
 #[pyclass(frozen)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct SnapshotInfo {
     snapshot_folder: PathBuf,
     snapshot_name: String,
@@ -237,7 +237,7 @@ impl SnapshotInfo {
     }
 
     fn snapshot_name_with_idx(&self, test_idx: usize) -> String {
-        if test_idx == 1 {
+        if test_idx == 1 || test_idx == 0 {
             self.snapshot_name.to_string()
         } else {
             format!("{}-{}", self.snapshot_name, test_idx)
@@ -406,18 +406,22 @@ fn assert_snapshot(test_info: &SnapshotInfo, result: &Bound<'_, PyAny>) -> PyRes
     Ok(())
 }
 
-fn create_snapshot_fn<I, O, F>(f: F) -> impl Fn(&I, &SnapshotInfo, Option<HashMap<String, RedactionType>>) -> Result<O, anyhow::Error>
+fn create_snapshot_fn<I, O, F>(f: F, name: String) -> impl Fn(&I, &SnapshotInfo, Option<HashMap<String, RedactionType>>, bool) -> Result<O, anyhow::Error>
 where
     I: Serialize + std::fmt::Debug,
     O: Serialize + DeserializeOwned,
-    F: FnOnce(&I) -> O + Clone,
+    F: Fn(&I) -> O + Clone,
 {
-    move |input: &I, info: &SnapshotInfo, redactions: Option<HashMap<String, RedactionType>>| {
-        let f = f.clone();
-        let snapshot_path = info.next_snapshot_path()?;
+    move |input: &I, info: &SnapshotInfo, redactions: Option<HashMap<String, RedactionType>>, record: bool| {
+        let finfo = SnapshotInfo {
+            snapshot_name: format!("{}_{}", info.snapshot_name, name),
+            ..(*info).clone()
+        };
+        
+        let snapshot_path = finfo.next_snapshot_path()?;
 
-        let snapshot_name = info.snapshot_name();
-        let mut settings: insta::Settings = info.try_into()?;
+        let snapshot_name = finfo.snapshot_name();
+        let mut settings: insta::Settings = (&finfo).try_into()?;
 
         for (selector, redaction) in redactions.unwrap_or_default() {
             settings.add_redaction(selector.as_str(), redaction)
@@ -428,15 +432,7 @@ where
         });
 
         // Try to load existing snapshot via insta
-        if snapshot_path.exists() {
-            match Snapshot::from_file(&snapshot_path)
-                .map_err(|e| anyhow::anyhow!(e.to_string()))?
-                .contents()
-            {
-                SnapshotContents::Text(content) => Ok(serde_json::from_str::<O>(&content.to_string())?),
-                SnapshotContents::Binary(_items) => Err(anyhow::anyhow!("Snapshot format not supported")),
-            }
-        } else {
+        if !snapshot_path.exists() || record {
             // Compute the result
             let result = f(input);
 
@@ -444,9 +440,18 @@ where
                 insta::assert_json_snapshot!(snapshot_name, result);
             });
             Ok(result)
+        } else {
+            match Snapshot::from_file(&snapshot_path)
+            .map_err(|e| anyhow::anyhow!(e.to_string()))?
+            .contents()
+            {
+                SnapshotContents::Text(content) => Ok(serde_json::from_str::<O>(&content.to_string())?),
+                SnapshotContents::Binary(_items) => Err(anyhow::anyhow!("Snapshot at {snapshot_path:?} is binary, which is not supported for deserialization"))                ,
+            }
         }
     }
 }
+
 
 #[pymodule]
 #[pyo3(name = "_pysnaptest")]
@@ -464,7 +469,7 @@ fn pysnaptest(m: &Bound<'_, PyModule>) -> PyResult<()> {
 #[cfg(test)]
 mod tests {
 
-    use std::path::{Path, PathBuf};
+    use std::{cell::Cell, path::{Path, PathBuf}, rc::Rc};
 
     use serde::{Deserialize, Serialize};
 
@@ -527,24 +532,35 @@ mod tests {
     #[test]
     fn test_snapshot_json_or_mock_creates_and_reads_snapshot() -> Result<(), anyhow::Error> {
         let input_1 = Input { val: 4 };
-        let f = |i: &Input| {
-            println!("This should not be called");
+    
+        // Shared counter to track how many times the function is called
+        let call_count = Rc::new(Cell::new(0));
+        let call_count_clone = Rc::clone(&call_count);
+    
+        let f = move |i: &Input| {
+            call_count_clone.set(call_count_clone.get() + 1);
             Output { double: i.val * 2 }
         };
-
+    
         let snapshot_info = SnapshotInfo {
             snapshot_folder: snapshot_folder_path(),
-            snapshot_name: "test_snapshot".to_string(),
+            snapshot_name: "test_create_snapshot_fn".to_string(),
             relative_test_file_path: None,
-            allow_duplicates: false,
+            allow_duplicates: true,
         };
-
-        let snapshot_json_or_mock = create_snapshot_fn(f);
-
-        let result_1 = snapshot_json_or_mock(&input_1, &snapshot_info, None)?;
-        insta::assert_json_snapshot!(result_1);
-        let result_2 = snapshot_json_or_mock(&input_1, &snapshot_info, None)?;
-        insta::assert_json_snapshot!(result_2);
+    
+        let snapshot_json_or_mock = create_snapshot_fn(f, "snapshot_json_or_mock".to_string());
+    
+        // First run: record mode, should call the function
+        let result_1 = snapshot_json_or_mock(&input_1, &snapshot_info, None, true)?;
+        assert_eq!(result_1.double, 8);
+        assert_eq!(call_count.get(), 1, "Function should have been called once during recording");
+    
+        // Second run: replay mode, should NOT call the function
+        let result_2 = snapshot_json_or_mock(&input_1, &snapshot_info, None, false)?;
+        assert_eq!(result_2.double, 8);
+        assert_eq!(call_count.get(), 1, "Function should NOT have been called again during replay");
+    
         Ok(())
     }
 }
