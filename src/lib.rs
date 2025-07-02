@@ -13,7 +13,7 @@ use insta::Snapshot;
 use insta::{rounded_redaction, sorted_redaction};
 use once_cell::sync::Lazy;
 use pyo3::types::PyAnyMethods;
-use pyo3::{FromPyObject, PyObject, Python};
+use pyo3::FromPyObject;
 use pyo3::{
     exceptions::PyValueError,
     pyclass, pyfunction, pymethods, pymodule,
@@ -216,16 +216,18 @@ impl SnapshotInfo {
         self.snapshot_name_with_idx(test_idx)
     }
 
-    pub fn last_snapshot_path(&self) -> PyResult<PathBuf> {
+    pub fn last_snapshot_path(&self, module_path: Option<String>) -> PyResult<PathBuf> {
+        let module_path = module_path.unwrap_or(module_path!().to_string()).replace("::", "__");
         Ok(self.snapshot_folder.join(format!(
-            "pysnaptest__{}@pysnap.snap",
+            "{module_path}__{}@pysnap.snap",
             self.last_snapshot_name()
         )))
     }
 
-    pub fn next_snapshot_path(&self) -> PyResult<PathBuf> {
+    pub fn next_snapshot_path(&self, module_path: Option<String>) -> PyResult<PathBuf> {
+        let module_path = module_path.unwrap_or(module_path!().to_string()).replace("::", "__");
         Ok(self.snapshot_folder.join(format!(
-            "pysnaptest__{}@pysnap.snap",
+            "{module_path}__{}@pysnap.snap",
             self.next_snapshot_name()
         )))
     }
@@ -405,6 +407,67 @@ fn assert_snapshot(test_info: &SnapshotInfo, result: &Bound<'_, PyAny>) -> PyRes
     });
     Ok(())
 }
+/// Alternative macro that automatically detects argument count using count_args
+#[macro_export]
+macro_rules! create_snapshot_fn_auto {
+    ($f:expr, $name:expr $(, $arg:ident )* ; $serialize_input:expr) => {{
+        let f = $f;
+        let name = $name;
+        let module_path = module_path!();
+
+        move |$( $arg ),+, info: &SnapshotInfo, redactions: Option<HashMap<String, RedactionType>>, record: bool| -> Result<_, anyhow::Error> {
+            let finfo = SnapshotInfo {
+                snapshot_name: format!("{}_{}", info.snapshot_name, name),
+                ..info.clone()
+            };
+            let snapshot_path = finfo.next_snapshot_path(Some(module_path.to_string()))?;
+            let snapshot_name = finfo.snapshot_name();
+            let mut settings: insta::Settings = (&finfo).try_into()?;
+
+            for (selector, redaction) in redactions.unwrap_or_default() {
+                settings.add_redaction(selector.as_str(), redaction);
+            }
+
+            // Serialize the input using the passed closure
+            let input_tuple = ($( $arg ),+,);
+            ($serialize_input)(&settings, &snapshot_name, &input_tuple);
+
+            if record || !snapshot_path.exists() {
+                let result = f($( $arg ),+);
+                settings.bind(|| {
+                    insta::assert_json_snapshot!(snapshot_name, result);
+                });
+                Ok(result)
+            } else {
+                match Snapshot::from_file(&snapshot_path)
+                    .map_err(|e| anyhow::anyhow!(e.to_string()))?
+                    .contents()
+                {
+                    SnapshotContents::Text(content) => {
+                        Ok(serde_json::from_str(&content.to_string())?)
+                    },
+                    SnapshotContents::Binary(_) => Err(anyhow::anyhow!(
+                        "Snapshot at {:?} is binary, which is not supported for deserialization",
+                        snapshot_path
+                    )),
+                }
+            }
+        }
+    }};
+
+    ($f:expr, $name:expr $(, $arg:ident )* ) => {
+        create_snapshot_fn_auto!(
+            $f,
+            $name,
+            $( $arg ),+;
+            |settings: &insta::Settings, snapshot_name: &str, input: &_| {
+                settings.bind(|| {
+                    insta::assert_json_snapshot!(format!("{snapshot_name}-request"), input);
+                });
+            }
+        )
+    };
+}
 
 fn create_snapshot_fn<I, O, F>(f: F, name: String) -> impl Fn(&I, &SnapshotInfo, Option<HashMap<String, RedactionType>>, bool) -> Result<O, anyhow::Error>
 where
@@ -418,7 +481,7 @@ where
             ..(*info).clone()
         };
         
-        let snapshot_path = finfo.next_snapshot_path()?;
+        let snapshot_path = finfo.next_snapshot_path(Some(module_path!().to_string()))?;
 
         let snapshot_name = finfo.snapshot_name();
         let mut settings: insta::Settings = (&finfo).try_into()?;
@@ -452,6 +515,57 @@ where
     }
 }
 
+// fn create_snapshot_fn_py<'py, I, O>(f: Py<PyAny>, name: String) -> impl Fn(
+//     Python<'_>,
+//     &Bound<'_, PyTuple>,  // Bound args
+//     Option<&Bound<'_, PyDict>>,  // Bound kwargs (now correct type)
+//     &SnapshotInfo, Option<HashMap<String, RedactionType>>, bool) -> PyResult<Bound<'py, PyAny>>
+// {
+//     move |py, args, kwargs, info, redactions, record| {
+//         let finfo = SnapshotInfo {
+//             snapshot_name: format!("{}_{}", info.snapshot_name, name),
+//             ..(*info).clone()
+//         };
+        
+//         let snapshot_path = finfo.next_snapshot_path()?;
+
+//         let snapshot_name = finfo.snapshot_name();
+//         let mut settings: insta::Settings = (&finfo).try_into()?;
+
+//         for (selector, redaction) in redactions.unwrap_or_default() {
+//             settings.add_redaction(selector.as_str(), redaction)
+//         }
+
+//         settings.bind(|| {
+//             insta::assert_json_snapshot!(format!("{snapshot_name}-request"), input);
+//         });
+
+//         // Try to load existing snapshot via insta
+//         if !snapshot_path.exists() || record {
+//             // Compute the result
+//             let result = f.call(py, args, kwargs)?.bind(py);
+
+//             settings.bind(|| {
+//                 insta::assert_json_snapshot!(snapshot_name, pythonize::depythonize(&result).unwrap());
+//             });
+//             Ok(*result)
+//         } else {
+//             match Snapshot::from_file(&snapshot_path)
+//             .map_err(|e| anyhow::anyhow!(e.to_string()))?
+//             .contents()
+//             {
+//                 SnapshotContents::Text(content) => {
+//                     let value: serde_json::Value = serde_json::from_str(&content.to_string())?;
+//                     let py_obj = pythonize::pythonize(py, &value)?;
+//                     Ok(py_obj)
+//                 },
+//                 SnapshotContents::Binary(_items) => Err(anyhow::anyhow!("Snapshot at {snapshot_path:?} is binary, which is not supported for deserialization"))                ,
+//             }
+//         }
+//     }
+// }
+
+
 
 #[pymodule]
 #[pyo3(name = "_pysnaptest")]
@@ -471,9 +585,9 @@ mod tests {
 
     use std::{cell::Cell, path::{Path, PathBuf}, rc::Rc};
 
-    use serde::{Deserialize, Serialize};
+    use super::*;
 
-    use crate::{create_snapshot_fn, Error, PytestInfo, SnapshotInfo};
+    use crate::{Error, PytestInfo, SnapshotInfo};
 
     #[test]
     fn test_into_pyinfo_happy_path() {
@@ -513,16 +627,6 @@ mod tests {
         insta::assert_snapshot!(snapshot_info.next_snapshot_name(), @"snapshot_name_override-3");
     }
 
-    #[derive(Debug, Serialize, Deserialize, PartialEq)]
-    struct Input {
-        val: i32,
-    }
-
-    #[derive(Debug, Serialize, Deserialize, PartialEq)]
-    struct Output {
-        double: i32,
-    }
-
     fn snapshot_folder_path() -> PathBuf {
         // This env var points to the root of your crate during cargo test/build
         let crate_root = Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -531,34 +635,35 @@ mod tests {
 
     #[test]
     fn test_snapshot_json_or_mock_creates_and_reads_snapshot() -> Result<(), anyhow::Error> {
-        let input_1 = Input { val: 4 };
+        let input_1 = 4;
     
         // Shared counter to track how many times the function is called
         let call_count = Rc::new(Cell::new(0));
         let call_count_clone = Rc::clone(&call_count);
     
-        let f = move |i: &Input| {
+        let f = |i| {
             call_count_clone.set(call_count_clone.get() + 1);
-            Output { double: i.val * 2 }
+            i * 2 
         };
-    
+        
+        let snaphot_folder_path = snapshot_folder_path();
         let snapshot_info = SnapshotInfo {
-            snapshot_folder: snapshot_folder_path(),
+            snapshot_folder: snaphot_folder_path,
             snapshot_name: "test_create_snapshot_fn".to_string(),
             relative_test_file_path: None,
             allow_duplicates: true,
         };
     
-        let snapshot_json_or_mock = create_snapshot_fn(f, "snapshot_json_or_mock".to_string());
+        let snapshot_json_or_mock = create_snapshot_fn_auto!(f, "snapshot_json_or_mock".to_string(), x);
     
         // First run: record mode, should call the function
-        let result_1 = snapshot_json_or_mock(&input_1, &snapshot_info, None, true)?;
-        assert_eq!(result_1.double, 8);
+        let result_1: i32 = snapshot_json_or_mock(input_1, &snapshot_info, None, true)?;
+        assert_eq!(result_1, 8);
         assert_eq!(call_count.get(), 1, "Function should have been called once during recording");
     
         // Second run: replay mode, should NOT call the function
-        let result_2 = snapshot_json_or_mock(&input_1, &snapshot_info, None, false)?;
-        assert_eq!(result_2.double, 8);
+        let result_2: i32 = snapshot_json_or_mock(input_1, &snapshot_info, None, false)?;
+        assert_eq!(result_2, 8);
         assert_eq!(call_count.get(), 1, "Function should NOT have been called again during replay");
     
         Ok(())
