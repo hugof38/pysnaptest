@@ -505,16 +505,16 @@ struct PyMockWrapper {
     record: bool,
 }
 
-use std::clone::Clone;
 #[pymethods]
 impl PyMockWrapper {
+    #[pyo3(signature = (*args))]
     fn __call__(&self, args: &Bound<'_, PyTuple>) -> PyResult<PyObject> {
         (self.f)(args, &self.snapshot_info, None, self.record)
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
     }
 }
 
-fn wrap_py_fn_snapshot(
+fn wrap_py_fn_snapshot_json(
     py_fn: PyObject,
 ) -> impl for<'b> Fn(
     &'b Bound<'_, PyTuple>,
@@ -552,7 +552,7 @@ fn wrap_py_fn_snapshot(
 }
 
 #[pyfunction]
-fn create_mocked_pyfn(
+fn mocked_pyfn_json(
     py_fn: PyObject,
     snapshot_info: SnapshotInfo,
     record: bool,
@@ -561,7 +561,7 @@ fn create_mocked_pyfn(
         let callable = Py::new(
             py,
             PyMockWrapper {
-                f: Box::new(wrap_py_fn_snapshot(py_fn)),
+                f: Box::new(wrap_py_fn_snapshot_json(py_fn)),
                 snapshot_info,
                 record,
             },
@@ -579,7 +579,7 @@ fn pysnaptest(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(assert_binary_snapshot, m)?)?;
     m.add_function(wrap_pyfunction!(assert_json_snapshot, m)?)?;
     m.add_function(wrap_pyfunction!(assert_csv_snapshot, m)?)?;
-    m.add_function(wrap_pyfunction!(create_mocked_pyfn, m)?)?;
+    m.add_function(wrap_pyfunction!(mocked_pyfn_json, m)?)?;
     m.add_class::<PySnapshot>()?;
     Ok(())
 }
@@ -588,7 +588,10 @@ fn pysnaptest(m: &Bound<'_, PyModule>) -> PyResult<()> {
 mod tests {
 
     use std::{
-        cell::Cell, ffi::CString, path::{Path, PathBuf}, rc::Rc
+        cell::Cell,
+        ffi::CString,
+        path::{Path, PathBuf},
+        rc::Rc,
     };
 
     use pyo3::{types::PyDict, IntoPyObject};
@@ -694,7 +697,7 @@ mod tests {
             allow_duplicates: true,
             snapshot_folder: snapshot_folder_path(),
         };
-    
+
         Python::with_gil(|py| -> PyResult<()> {
             // Define a Python function with a mutable counter
             let code = r#"
@@ -703,31 +706,36 @@ def compute(x):
     counter["calls"] += 1
     return {"result": x * 10, "calls": counter["calls"]}
 "#;
-    
-            let module = PyModule::from_code(py, CString::new(code)?.as_c_str(), CString::new("testmod.py")?.as_c_str(), CString::new("testmod")?.as_c_str())?;
+
+            let module = PyModule::from_code(
+                py,
+                CString::new(code)?.as_c_str(),
+                CString::new("testmod.py")?.as_c_str(),
+                CString::new("testmod")?.as_c_str(),
+            )?;
             let py_fn: Py<PyAny> = module.getattr("compute")?.into_pyobject(py)?.into();
-    
+
             // Wrap with snapshot function in RECORDING mode
-            let wrapper_obj = create_mocked_pyfn(py_fn.clone_ref(py), snapshot_info.clone(), true)?;
+            let wrapper_obj = mocked_pyfn_json(py_fn.clone_ref(py), snapshot_info.clone(), true)?;
             let wrapper = wrapper_obj.bind(py);
-    
+
             let args = PyTuple::new(py, 7.into_pyobject(py))?;
-    
+
             let result1: Bound<'_, PyDict> = wrapper.call1((args,))?.extract()?;
             assert_eq!(result1.get_item("result").unwrap().extract::<i32>()?, 70);
             assert_eq!(result1.get_item("calls").unwrap().extract::<i32>()?, 1);
-    
-            let wrapper_obj = create_mocked_pyfn(py_fn, snapshot_info.clone(), false)?;
+
+            let wrapper_obj = mocked_pyfn_json(py_fn, snapshot_info.clone(), false)?;
             let wrapper = wrapper_obj.bind(py);
             let args = PyTuple::new(py, 7.into_pyobject(py))?;
-    
+
             let result2: Bound<'_, PyDict> = wrapper.call1((args,))?.extract()?;
             assert_eq!(result2.get_item("result").unwrap().extract::<i32>()?, 70);
             assert_eq!(result2.get_item("calls").unwrap().extract::<i32>()?, 1);
-    
+
             Ok(())
         })?;
-    
+
         Ok(())
-    }    
+    }
 }
