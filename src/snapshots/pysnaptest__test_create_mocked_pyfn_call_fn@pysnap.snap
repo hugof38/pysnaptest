@@ -1,0 +1,7 @@
+---
+source: src/lib.rs
+---
+{
+  "calls": 1,
+  "result": 70
+}
