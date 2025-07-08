@@ -15,7 +15,7 @@ use insta::internals::{Redaction, SnapshotContents};
 use insta::Snapshot;
 use insta::{rounded_redaction, sorted_redaction};
 use once_cell::sync::Lazy;
-use pyo3::types::{PyAnyMethods, PyTuple};
+use pyo3::types::{PyAnyMethods, PyDict, PyTuple};
 use pyo3::{
     exceptions::PyValueError,
     pyclass, pyfunction, pymethods, pymodule,
@@ -472,20 +472,27 @@ macro_rules! create_snapshot_fn_auto {
     };
 }
 macro_rules! assert_json_snapshot_depythonize {
-    ($snapshot_name:expr, ($( $arg:expr ),+) ) => {{
+    ($snapshot_name:expr, ($arg:expr, $kwargs:expr ) ) => {{
         // Create a tuple of depythonized values
-        let input_tuple = (
-            $(
-                pythonize::depythonize::<serde_json::Value>($arg as &Bound<PyAny>).expect(&format!("Failed to depythonize {:?}", $arg))
-            ),+
-        );
 
-        assert_json_snapshot_macro!($snapshot_name, input_tuple);
+        let rust_args = pythonize::depythonize::<serde_json::Value>($arg as &Bound<PyAny>)
+            .expect(&format!("Failed to depythonize args {:?}", $arg));
+        let rust_kwargs = Option::<&Bound<'_, PyDict>>::map($kwargs, |kw| {
+            pythonize::depythonize::<serde_json::Value>(kw as &Bound<PyAny>)
+                .expect(&format!("Failed to depythonize kwargs {:?}", kw))
+        });
+        let input_json = serde_json::json!({
+            "args": rust_args,
+            "kwargs": rust_kwargs.unwrap_or(serde_json::Value::Null)
+        });
+
+        assert_json_snapshot_macro!($snapshot_name, input_json);
     }};
     ($snapshot_name:expr, $arg:expr) => {{
         Python::with_gil(|py| {
             let bound: &pyo3::Bound<PyAny> = $arg.bind(py);
-            let input_tuple = pythonize::depythonize::<serde_json::Value>(&bound).expect(&format!("Failed to depythonize {:?}", $arg));
+            let input_tuple = pythonize::depythonize::<serde_json::Value>(&bound)
+                .expect(&format!("Failed to depythonize {:?}", $arg));
             assert_json_snapshot_macro!($snapshot_name, input_tuple);
         });
     }};
@@ -496,6 +503,7 @@ struct PyMockWrapper {
     f: Box<
         dyn for<'a> Fn(
                 &'a Bound<'_, PyTuple>,
+                Option<&'a Bound<'_, PyDict>>,
                 &'a SnapshotInfo,
                 Option<HashMap<String, RedactionType>>,
                 bool,
@@ -509,9 +517,13 @@ struct PyMockWrapper {
 
 #[pymethods]
 impl PyMockWrapper {
-    #[pyo3(signature = (*args))]
-    fn __call__(&self, args: &Bound<'_, PyTuple>) -> PyResult<PyObject> {
-        (self.f)(args, &self.snapshot_info, None, self.record)
+    #[pyo3(signature = (*args, **kwargs))]
+    fn __call__(
+        &self,
+        args: &Bound<'_, PyTuple>,
+        kwargs: Option<&Bound<'_, PyDict>>,
+    ) -> PyResult<PyObject> {
+        (self.f)(args, kwargs, &self.snapshot_info, None, self.record)
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
     }
 }
@@ -520,6 +532,7 @@ fn wrap_py_fn_snapshot_json(
     py_fn: PyObject,
 ) -> impl for<'b> Fn(
     &'b Bound<'_, PyTuple>,
+    Option<&'b Bound<'_, PyDict>>,
     &'b SnapshotInfo,
     Option<HashMap<String, RedactionType>>,
     bool,
@@ -527,17 +540,19 @@ fn wrap_py_fn_snapshot_json(
        + Send
        + Sync {
     move |args: &Bound<'_, PyTuple>,
+          kwargs: Option<&Bound<'_, _>>,
           info: &SnapshotInfo,
           redactions: Option<HashMap<String, RedactionType>>,
           record: bool| {
         let py_fn_cloned = Python::with_gil(|py| py_fn.clone_ref(py));
 
-        let call_fn = move |args: &Bound<'_, PyTuple>| -> PyResult<PyObject> {
-            Python::with_gil(|py| py_fn_cloned.call1(py, args))
-        };
+        let call_fn =
+            move |args: &Bound<'_, PyTuple>, kwargs: Option<&Bound<'_, _>>| -> PyResult<PyObject> {
+                Python::with_gil(|py| py_fn_cloned.call(py, args, kwargs))
+            };
 
         let wrapped_fn = create_snapshot_fn_auto!(
-            call_fn, args;
+            call_fn, args, kwargs;
             serialize_macro=assert_json_snapshot_depythonize;
             result_from_str=|content: String| -> PyResult<PyObject> {
                 Python::with_gil(|py| {
@@ -549,7 +564,7 @@ fn wrap_py_fn_snapshot_json(
             }
         );
 
-        wrapped_fn(args, info, redactions, record)
+        wrapped_fn(args, kwargs, info, redactions, record)
     }
 }
 
@@ -723,7 +738,7 @@ def compute(x):
 
             let args = PyTuple::new(py, 7.into_pyobject(py))?;
 
-            let result1: Bound<'_, PyDict> = wrapper.call1((args,))?.extract()?;
+            let result1: Bound<'_, PyDict> = wrapper.call1(args)?.extract()?;
             assert_eq!(result1.get_item("result").unwrap().extract::<i32>()?, 70);
             assert_eq!(result1.get_item("calls").unwrap().extract::<i32>()?, 1);
 
@@ -731,7 +746,7 @@ def compute(x):
             let wrapper = wrapper_obj.bind(py);
             let args = PyTuple::new(py, 7.into_pyobject(py))?;
 
-            let result2: Bound<'_, PyDict> = wrapper.call1((args,))?.extract()?;
+            let result2: Bound<'_, PyDict> = wrapper.call1(args)?.extract()?;
             assert_eq!(result2.get_item("result").unwrap().extract::<i32>()?, 70);
             assert_eq!(result2.get_item("calls").unwrap().extract::<i32>()?, 1);
 
