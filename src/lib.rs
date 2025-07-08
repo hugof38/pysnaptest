@@ -1,3 +1,5 @@
+#![deny(clippy::unwrap_used)]
+
 use std::collections::{BTreeMap, HashMap};
 use std::env::VarError;
 use std::ops::Deref;
@@ -333,7 +335,7 @@ fn assert_json_snapshot(
     result: &Bound<'_, PyAny>,
     redactions: Option<HashMap<String, RedactionType>>,
 ) -> PyResult<()> {
-    let res: serde_json::Value = pythonize::depythonize(result).unwrap();
+    let res: serde_json::Value = pythonize::depythonize(result)?;
     let snapshot_name = test_info.snapshot_name();
     let mut settings: insta::Settings = test_info.try_into()?;
 
