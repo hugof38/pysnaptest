@@ -33,6 +33,7 @@ def extract_from_pytest_env(
         allow_duplicates=allow_duplicates,
     )
 
+
 def mock_json_snapshot(
     func: Callable,
     record: bool = False,

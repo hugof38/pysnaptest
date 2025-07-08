@@ -462,7 +462,6 @@ macro_rules! snapshot_fn_auto {
     }};
 }
 
-#[macro_export]
 macro_rules! snapshot_fn_auto_json {
     ($f:expr $(, $arg:ident )* ; serialize_macro = $serialize_macro:ident ; result_from_str=$result_from_str:expr) => {
         snapshot_fn_auto!($f $(, $arg )* ; serialize_macro = $serialize_macro ; result_from_str=$result_from_str)
@@ -477,8 +476,6 @@ macro_rules! snapshot_fn_auto_json {
         )
     };
 }
-
-
 
 macro_rules! assert_json_snapshot_depythonize {
     ($snapshot_name:expr, ($arg:expr, $kwargs:expr ) ) => {{
@@ -508,6 +505,7 @@ macro_rules! assert_json_snapshot_depythonize {
 }
 
 #[pyclass]
+#[allow(clippy::type_complexity)]
 struct PyMockWrapper {
     f: Box<
         dyn for<'a> Fn(
@@ -537,6 +535,7 @@ impl PyMockWrapper {
     }
 }
 
+#[allow(clippy::type_complexity)]
 fn wrap_py_fn_snapshot_json(
     py_fn: PyObject,
 ) -> impl for<'b> Fn(
