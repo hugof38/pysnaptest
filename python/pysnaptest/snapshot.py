@@ -3,7 +3,7 @@ from ._pysnaptest import assert_json_snapshot as _assert_json_snapshot
 from ._pysnaptest import assert_csv_snapshot as _assert_csv_snapshot
 from ._pysnaptest import assert_snapshot as _assert_snapshot
 from ._pysnaptest import assert_binary_snapshot as _assert_binary_snapshot
-from ._pysnaptest import mocked_pyfn_json as _mocked_pyfn_json
+from ._pysnaptest import mock_json_snapshot as _mock_json_snapshot
 from ._pysnaptest import SnapshotInfo
 from typing import Callable, Any, Dict, overload, Union, Optional, TYPE_CHECKING
 from functools import partial, wraps
@@ -33,7 +33,7 @@ def extract_from_pytest_env(
         allow_duplicates=allow_duplicates,
     )
 
-def mock_or_json_snapshot(
+def mock_json_snapshot(
     func: Callable,
     record: bool = False,
     snapshot_path: Optional[str] = None,
@@ -42,7 +42,7 @@ def mock_or_json_snapshot(
     allow_duplicates: bool = False,
 ):
     test_info = extract_from_pytest_env(snapshot_path, snapshot_name, allow_duplicates)
-    return _mocked_pyfn_json(func, test_info, record)
+    return _mock_json_snapshot(func, test_info, record)
 
 
 def assert_json_snapshot(

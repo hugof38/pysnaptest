@@ -552,7 +552,7 @@ fn wrap_py_fn_snapshot_json(
 }
 
 #[pyfunction]
-fn mocked_pyfn_json(
+fn mock_json_snapshot(
     py_fn: PyObject,
     snapshot_info: SnapshotInfo,
     record: bool,
@@ -579,7 +579,7 @@ fn pysnaptest(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(assert_binary_snapshot, m)?)?;
     m.add_function(wrap_pyfunction!(assert_json_snapshot, m)?)?;
     m.add_function(wrap_pyfunction!(assert_csv_snapshot, m)?)?;
-    m.add_function(wrap_pyfunction!(mocked_pyfn_json, m)?)?;
+    m.add_function(wrap_pyfunction!(mock_json_snapshot, m)?)?;
     m.add_class::<PySnapshot>()?;
     Ok(())
 }
@@ -716,7 +716,7 @@ def compute(x):
             let py_fn: Py<PyAny> = module.getattr("compute")?.into_pyobject(py)?.into();
 
             // Wrap with snapshot function in RECORDING mode
-            let wrapper_obj = mocked_pyfn_json(py_fn.clone_ref(py), snapshot_info.clone(), true)?;
+            let wrapper_obj = mock_json_snapshot(py_fn.clone_ref(py), snapshot_info.clone(), true)?;
             let wrapper = wrapper_obj.bind(py);
 
             let args = PyTuple::new(py, 7.into_pyobject(py))?;
@@ -725,7 +725,7 @@ def compute(x):
             assert_eq!(result1.get_item("result").unwrap().extract::<i32>()?, 70);
             assert_eq!(result1.get_item("calls").unwrap().extract::<i32>()?, 1);
 
-            let wrapper_obj = mocked_pyfn_json(py_fn, snapshot_info.clone(), false)?;
+            let wrapper_obj = mock_json_snapshot(py_fn, snapshot_info.clone(), false)?;
             let wrapper = wrapper_obj.bind(py);
             let args = PyTuple::new(py, 7.into_pyobject(py))?;
 

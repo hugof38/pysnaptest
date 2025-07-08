@@ -13,7 +13,7 @@ from pysnaptest import (
     assert_snapshot,
     extract_from_pytest_env,
     PySnapshot,
-    mock_or_json_snapshot
+    mock_json_snapshot
 )
 import pytest
 
@@ -210,7 +210,7 @@ def test_snapshot_contents_json():
 
 
 def test_save_snapshot_path_in_advance():
-    snapshot_that_will_be_created = extract_from_pytest_env().next_snapshot_path()
+    snapshot_that_will_be_created = extract_from_pytest_env().next_snapshot_path(None)
     expected = "expected_result_1"
     assert_snapshot(expected)
     snapshot = PySnapshot.from_file(snapshot_that_will_be_created)
@@ -220,13 +220,13 @@ def test_save_snapshot_path_in_advance():
 def test_snapshot_then_load():
     expected = "expected_result_1"
     assert_snapshot(expected)
-    snapshot = PySnapshot.from_file(extract_from_pytest_env().last_snapshot_path())
+    snapshot = PySnapshot.from_file(extract_from_pytest_env().last_snapshot_path(None))
     assert snapshot.contents().decode() == expected
 
 def test_mock_or_json_snapshot():
     def add(x, y):
         return {"sum": x + y, "x": x, "y": y}
-    mocked = mock_or_json_snapshot(func=add)
+    mocked = mock_json_snapshot(func=add)
     result = mocked(1, 2)
     assert isinstance(result, dict)
     assert result["sum"] == 3
