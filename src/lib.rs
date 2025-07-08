@@ -413,8 +413,7 @@ fn assert_snapshot(test_info: &SnapshotInfo, result: &Bound<'_, PyAny>) -> PyRes
     Ok(())
 }
 
-#[macro_export]
-macro_rules! create_snapshot_fn_auto {
+macro_rules! snapshot_fn_auto {
     ($f:expr $(, $arg:ident )* ; serialize_macro = $serialize_macro:ident ; result_from_str=$result_from_str:expr) => {{
         let f = $f;
         let name = stringify!($f);
@@ -461,9 +460,16 @@ macro_rules! create_snapshot_fn_auto {
             }
         }
     }};
+}
+
+#[macro_export]
+macro_rules! snapshot_fn_auto_json {
+    ($f:expr $(, $arg:ident )* ; serialize_macro = $serialize_macro:ident ; result_from_str=$result_from_str:expr) => {
+        snapshot_fn_auto!($f $(, $arg )* ; serialize_macro = $serialize_macro ; result_from_str=$result_from_str)
+    };
 
     ($f:expr $(, $arg:ident )* ) => {
-        create_snapshot_fn_auto!(
+        snapshot_fn_auto_json!(
             $f,
             $( $arg ),+;
             serialize_macro=assert_json_snapshot_macro;
@@ -471,6 +477,9 @@ macro_rules! create_snapshot_fn_auto {
         )
     };
 }
+
+
+
 macro_rules! assert_json_snapshot_depythonize {
     ($snapshot_name:expr, ($arg:expr, $kwargs:expr ) ) => {{
         // Create a tuple of depythonized values
@@ -551,7 +560,7 @@ fn wrap_py_fn_snapshot_json(
                 Python::with_gil(|py| py_fn_cloned.call(py, args, kwargs))
             };
 
-        let wrapped_fn = create_snapshot_fn_auto!(
+        let wrapped_fn = snapshot_fn_auto_json!(
             call_fn, args, kwargs;
             serialize_macro=assert_json_snapshot_depythonize;
             result_from_str=|content: String| -> PyResult<PyObject> {
@@ -682,7 +691,7 @@ mod tests {
             allow_duplicates: true,
         };
 
-        let snapshot_json_or_mock = create_snapshot_fn_auto!(f, x);
+        let snapshot_json_or_mock = snapshot_fn_auto_json!(f, x);
 
         // First run: record mode, should call the function
         let result_1: i32 = snapshot_json_or_mock(input_1, &snapshot_info, None, true)?;
