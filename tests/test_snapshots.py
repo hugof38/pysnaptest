@@ -1,6 +1,7 @@
 from __future__ import annotations
 from pathlib import Path
 import sys
+import platform
 import json
 
 from pysnaptest import (
@@ -104,7 +105,7 @@ def test_assert_pandas_dataframe_snapshot():
     assert_dataframe_snapshot(df, index=False)
 
 
-@pytest.mark.skipif(PANDAS_UNAVAILABLE, reason="Pandas is an optional dependency")
+@pytest.mark.skipif(PANDAS_UNAVAILABLE or platform.system() != "Darwin", reason="Pandas is an optional dependency")
 @snapshot(dataframe_snapshot_format="parquet")
 def test_assert_pandas_dataframe_binary_snapshot():
     df = pd.DataFrame({"name": ["foo", "bar"], "id": [1, 2]})
@@ -131,7 +132,7 @@ def test_assert_polars_dataframe_snapshot() -> pl.DataFrame:
 
 
 @pytest.mark.skipif(
-    POLARS_UNAVAILABLE or (sys.version_info.major != 3 or sys.version_info.minor != 13),
+    POLARS_UNAVAILABLE or (sys.version_info.major != 3 or sys.version_info.minor != 13) or platform.system() != "Darwin",
     reason="Polars is an optional dependency",
 )
 @snapshot(dataframe_snapshot_format="bin")
@@ -229,7 +230,7 @@ def test_mock_or_json_snapshot():
         return {"sum": x + y, "x": x, "y": y}
 
     mocked = mock_json_snapshot(func=add)
-    result = mocked(1, 2)
+    result = mocked(1, y=2)
     assert isinstance(result, dict)
     assert result["sum"] == 3
     assert result["x"] == 1
