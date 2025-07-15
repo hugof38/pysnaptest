@@ -60,23 +60,44 @@ def resolve_function(dotted_path: str):
 
 
 class snapshot_json_patch:
-    def __init__(self, dotted_path):
+    def __init__(
+        self,
+        dotted_path: str,
+        *,
+        record: bool = False,
+        snapshot_path: Optional[str] = None,
+        snapshot_name: Optional[str] = None,
+        redactions: Optional[Dict[str, str | int | None]] = None,
+        allow_duplicates: bool = False,
+    ):
         self.dotted_path = dotted_path
+        self.record = record
+        self.snapshot_path = snapshot_path
+        self.snapshot_name = snapshot_name
+        self.redactions = redactions
+        self.allow_duplicates = allow_duplicates
         self._patcher = None
 
     def __enter__(self):
         original_fn = resolve_function(self.dotted_path)
-        self._patcher = patch(
-            self.dotted_path, side_effect=mock_json_snapshot(original_fn)
+        mocked_fn = mock_json_snapshot(
+            original_fn,
+            record=self.record,
+            snapshot_path=self.snapshot_path,
+            snapshot_name=self.snapshot_name,
+            redactions=self.redactions,
+            allow_duplicates=self.allow_duplicates,
         )
+        self._patcher = patch(self.dotted_path, side_effect=mocked_fn)
         self.mock = self._patcher.__enter__()
         return self.mock
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         return self._patcher.__exit__(exc_type, exc_val, exc_tb)
 
-    def __call__(self, func):
-        # Used as a decorator
+    def __call__(self, func: Callable):
+        # Used as a decorator, with access to the same parameters
+
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             with self:
