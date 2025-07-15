@@ -278,7 +278,7 @@ impl TryInto<insta::Settings> for &SnapshotInfo {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum RedactionType {
     Sorted,
     Rounded(usize),
@@ -520,6 +520,7 @@ struct PyMockWrapper {
     >,
     snapshot_info: SnapshotInfo,
     record: bool,
+    redactions: Option<HashMap<String, RedactionType>>,
 }
 
 #[pymethods]
@@ -530,8 +531,14 @@ impl PyMockWrapper {
         args: &Bound<'_, PyTuple>,
         kwargs: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<PyObject> {
-        (self.f)(args, kwargs, &self.snapshot_info, None, self.record)
-            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
+        (self.f)(
+            args,
+            kwargs,
+            &self.snapshot_info,
+            self.redactions.clone(),
+            self.record,
+        )
+        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
     }
 }
 
@@ -581,6 +588,7 @@ fn mock_json_snapshot(
     py_fn: PyObject,
     snapshot_info: SnapshotInfo,
     record: bool,
+    redactions: Option<HashMap<String, RedactionType>>,
 ) -> PyResult<PyObject> {
     Python::with_gil(|py| {
         let callable = Py::new(
@@ -589,6 +597,7 @@ fn mock_json_snapshot(
                 f: Box::new(wrap_py_fn_snapshot_json(py_fn)),
                 snapshot_info,
                 record,
+                redactions,
             },
         )?;
         Ok(callable.into())
@@ -741,7 +750,8 @@ def compute(x):
             let py_fn: Py<PyAny> = module.getattr("compute")?.into_pyobject(py)?.into();
 
             // Wrap with snapshot function in RECORDING mode
-            let wrapper_obj = mock_json_snapshot(py_fn.clone_ref(py), snapshot_info.clone(), true)?;
+            let wrapper_obj =
+                mock_json_snapshot(py_fn.clone_ref(py), snapshot_info.clone(), true, None)?;
             let wrapper = wrapper_obj.bind(py);
 
             let args = PyTuple::new(py, 7.into_pyobject(py))?;
@@ -750,7 +760,7 @@ def compute(x):
             assert_eq!(result1.get_item("result").unwrap().extract::<i32>()?, 70);
             assert_eq!(result1.get_item("calls").unwrap().extract::<i32>()?, 1);
 
-            let wrapper_obj = mock_json_snapshot(py_fn, snapshot_info.clone(), false)?;
+            let wrapper_obj = mock_json_snapshot(py_fn, snapshot_info.clone(), false, None)?;
             let wrapper = wrapper_obj.bind(py);
             let args = PyTuple::new(py, 7.into_pyobject(py))?;
 

@@ -258,3 +258,15 @@ def test_mock_or_json_snapshot_diff_args():
     assert result["sum"] == 4
     assert result["x"] == 1
     assert result["y"] == 3
+
+
+def test_mock_or_json_snapshot_redactions():
+    def add(x, y):
+        return {"sum": x + y, "x": x, "y": y}
+
+    mocked = mock_json_snapshot(func=add, redactions={".sum": "[redacted]"})
+    result = mocked(1, 2)
+    assert isinstance(result, dict)
+    assert result["sum"] == "[redacted]"
+    assert result["x"] == 1
+    assert result["y"] == 2

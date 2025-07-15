@@ -43,7 +43,7 @@ def mock_json_snapshot(
     allow_duplicates: bool = False,
 ):
     test_info = extract_from_pytest_env(snapshot_path, snapshot_name, allow_duplicates)
-    return _mock_json_snapshot(func, test_info, record)
+    return _mock_json_snapshot(func, test_info, record, redactions)
 
 
 def assert_json_snapshot(

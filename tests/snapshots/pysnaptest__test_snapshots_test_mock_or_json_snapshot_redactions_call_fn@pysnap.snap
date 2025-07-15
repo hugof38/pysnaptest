@@ -1,0 +1,9 @@
+---
+source: src/lib.rs
+description: "Test File Path: tests/test_snapshots.py"
+---
+{
+  "sum": "[redacted]",
+  "x": 1,
+  "y": 2
+}
