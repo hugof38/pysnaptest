@@ -241,6 +241,7 @@ def test_mock_or_json_snapshot():
     assert result["x"] == 1
     assert result["y"] == 2
 
+
 def test_mock_or_json_snapshot_diff_args():
     def add(x, y):
         return {"sum": x + y, "x": x, "y": y}
@@ -257,4 +258,3 @@ def test_mock_or_json_snapshot_diff_args():
     assert result["sum"] == 4
     assert result["x"] == 1
     assert result["y"] == 3
-
