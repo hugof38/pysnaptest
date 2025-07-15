@@ -10,5 +10,6 @@ from .snapshot import (
     rounded_redaction,
     extract_from_pytest_env,
     mock_json_snapshot,
+    snapshot_json_patch,
 )
 from ._pysnaptest import PySnapshot

@@ -8,6 +8,9 @@ from ._pysnaptest import SnapshotInfo
 from typing import Callable, Any, Dict, overload, Union, Optional, TYPE_CHECKING
 from functools import partial, wraps
 import asyncio
+import importlib
+from unittest.mock import patch
+import functools
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -44,6 +47,42 @@ def mock_json_snapshot(
 ):
     test_info = extract_from_pytest_env(snapshot_path, snapshot_name, allow_duplicates)
     return _mock_json_snapshot(func, test_info, record, redactions)
+
+
+def resolve_function(dotted_path: str):
+    """
+    Given a string like 'my_project.main.http_request',
+    import 'my_project.main' and return its 'http_request' attribute.
+    """
+    module_path, attr_name = dotted_path.rsplit(".", 1)
+    module = importlib.import_module(module_path)
+    return getattr(module, attr_name)
+
+
+class snapshot_json_patch:
+    def __init__(self, dotted_path):
+        self.dotted_path = dotted_path
+        self._patcher = None
+
+    def __enter__(self):
+        original_fn = resolve_function(self.dotted_path)
+        self._patcher = patch(
+            self.dotted_path, side_effect=mock_json_snapshot(original_fn)
+        )
+        self.mock = self._patcher.__enter__()
+        return self.mock
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        return self._patcher.__exit__(exc_type, exc_val, exc_tb)
+
+    def __call__(self, func):
+        # Used as a decorator
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            with self:
+                return func(*args, **kwargs)
+
+        return wrapper
 
 
 def assert_json_snapshot(
