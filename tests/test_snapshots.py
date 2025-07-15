@@ -240,3 +240,21 @@ def test_mock_or_json_snapshot():
     assert result["sum"] == 3
     assert result["x"] == 1
     assert result["y"] == 2
+
+def test_mock_or_json_snapshot_diff_args():
+    def add(x, y):
+        return {"sum": x + y, "x": x, "y": y}
+
+    mocked = mock_json_snapshot(func=add)
+    result = mocked(1, y=2)
+    assert isinstance(result, dict)
+    assert result["sum"] == 3
+    assert result["x"] == 1
+    assert result["y"] == 2
+
+    result = mocked(1, 3)
+    assert isinstance(result, dict)
+    assert result["sum"] == 4
+    assert result["x"] == 1
+    assert result["y"] == 3
+
