@@ -59,7 +59,7 @@ def resolve_function(dotted_path: str):
     return getattr(module, attr_name)
 
 
-class snapshot_json_patch:
+class patch_json_snapshot:
     def __init__(
         self,
         dotted_path: str,
