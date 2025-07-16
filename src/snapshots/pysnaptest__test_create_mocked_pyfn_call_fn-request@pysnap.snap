@@ -1,0 +1,9 @@
+---
+source: src/lib.rs
+---
+{
+  "args": [
+    7
+  ],
+  "kwargs": null
+}
