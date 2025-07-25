@@ -23,11 +23,51 @@ use pyo3::{
     wrap_pyfunction, Bound, PyAny, PyErr, PyResult,
 };
 use pyo3::{FromPyObject, Py, PyObject, Python};
+use std::fmt;
 
 const PYSNAPSHOT_SUFFIX: &str = "pysnap";
 
 static TEST_NAME_COUNTERS: Lazy<Mutex<BTreeMap<String, usize>>> =
     Lazy::new(|| Mutex::new(BTreeMap::new()));
+
+#[derive(Debug)]
+pub enum SnapshotError {
+    Io(std::io::Error),
+    Py(PyErr),
+    Json(serde_json::Error),
+    Message(String),
+}
+
+impl fmt::Display for SnapshotError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SnapshotError::Io(e) => write!(f, "{}", e),
+            SnapshotError::Py(e) => write!(f, "{}", e),
+            SnapshotError::Json(e) => write!(f, "{}", e),
+            SnapshotError::Message(s) => write!(f, "{}", s),
+        }
+    }
+}
+
+impl std::error::Error for SnapshotError {}
+
+impl From<std::io::Error> for SnapshotError {
+    fn from(e: std::io::Error) -> Self {
+        SnapshotError::Io(e)
+    }
+}
+
+impl From<serde_json::Error> for SnapshotError {
+    fn from(e: serde_json::Error) -> Self {
+        SnapshotError::Json(e)
+    }
+}
+
+impl From<PyErr> for SnapshotError {
+    fn from(e: PyErr) -> Self {
+        SnapshotError::Py(e)
+    }
+}
 
 #[derive(Debug)]
 struct Description {
@@ -419,7 +459,7 @@ macro_rules! snapshot_fn_auto {
         let name = stringify!($f);
         let module_path = module_path!();
 
-        move |$( $arg ),+, info: &SnapshotInfo, redactions: Option<HashMap<String, RedactionType>>, record: bool| -> Result<_, anyhow::Error> {
+        move |$( $arg ),+, info: &SnapshotInfo, redactions: Option<HashMap<String, RedactionType>>, record: bool| -> Result<_, SnapshotError> {
             let finfo = SnapshotInfo {
                 snapshot_name: format!("{}_{}", info.snapshot_name, name),
                 ..info.clone()
@@ -446,15 +486,17 @@ macro_rules! snapshot_fn_auto {
                 Ok(result)
             } else {
                 match Snapshot::from_file(&snapshot_path)
-                    .map_err(|e| anyhow::anyhow!(e.to_string()))?
+                    .map_err(Into::into)?
                     .contents()
                 {
                     SnapshotContents::Text(content) => {
                         Ok(($result_from_str)(content.to_string())?)
                     },
-                    SnapshotContents::Binary(_) => Err(anyhow::anyhow!(
-                        "Snapshot at {:?} is binary, which is not supported for deserialization",
-                        snapshot_path
+                    SnapshotContents::Binary(_) => Err(SnapshotError::Message(
+                        format!(
+                            "Snapshot at {:?} is binary, which is not supported for deserialization",
+                            snapshot_path
+                        ),
                     )),
                 }
             }
@@ -514,7 +556,7 @@ struct PyMockWrapper {
                 &'a SnapshotInfo,
                 Option<HashMap<String, RedactionType>>,
                 bool,
-            ) -> Result<Py<PyAny>, anyhow::Error>
+            ) -> Result<Py<PyAny>, SnapshotError>
             + Send
             + Sync,
     >,
@@ -551,7 +593,7 @@ fn wrap_py_fn_snapshot_json(
     &'b SnapshotInfo,
     Option<HashMap<String, RedactionType>>,
     bool,
-) -> Result<Py<PyAny>, anyhow::Error>
+) -> Result<Py<PyAny>, SnapshotError>
        + Send
        + Sync {
     move |args: &Bound<'_, PyTuple>,
@@ -632,7 +674,7 @@ mod tests {
 
     use super::*;
 
-    use crate::{Error, PytestInfo, SnapshotInfo};
+    use crate::{Error, PytestInfo, SnapshotError, SnapshotInfo};
 
     #[test]
     fn test_into_pyinfo_happy_path() {
@@ -679,7 +721,7 @@ mod tests {
     }
 
     #[test]
-    fn test_snapshot_json_or_mock_creates_and_reads_snapshot() -> Result<(), anyhow::Error> {
+    fn test_snapshot_json_or_mock_creates_and_reads_snapshot() -> Result<(), SnapshotError> {
         let input_1 = 4;
 
         // Shared counter to track how many times the function is called
@@ -688,7 +730,7 @@ mod tests {
 
         let f = |i| {
             call_count_clone.set(call_count_clone.get() + 1);
-            Ok::<_, anyhow::Error>(i * 2)
+            Ok::<_, SnapshotError>(i * 2)
         };
 
         let snaphot_folder_path = snapshot_folder_path();
@@ -723,7 +765,7 @@ mod tests {
     }
 
     #[test]
-    fn test_create_mocked_pyfn_creates_and_reads_snapshot() -> Result<(), anyhow::Error> {
+    fn test_create_mocked_pyfn_creates_and_reads_snapshot() -> Result<(), SnapshotError> {
         pyo3::prepare_freethreaded_python();
         let snapshot_info = SnapshotInfo {
             snapshot_name: "test_create_mocked_pyfn".to_string(),
