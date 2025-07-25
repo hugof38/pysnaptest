@@ -1,6 +1,7 @@
 from __future__ import annotations
 from pathlib import Path
 import sys
+import platform
 import json
 
 from pysnaptest import (
@@ -13,6 +14,7 @@ from pysnaptest import (
     assert_snapshot,
     extract_from_pytest_env,
     PySnapshot,
+    mock_json_snapshot,
 )
 import pytest
 
@@ -103,7 +105,10 @@ def test_assert_pandas_dataframe_snapshot():
     assert_dataframe_snapshot(df, index=False)
 
 
-@pytest.mark.skipif(PANDAS_UNAVAILABLE, reason="Pandas is an optional dependency")
+@pytest.mark.skipif(
+    PANDAS_UNAVAILABLE or platform.system() != "Darwin",
+    reason="Pandas is an optional dependency",
+)
 @snapshot(dataframe_snapshot_format="parquet")
 def test_assert_pandas_dataframe_binary_snapshot():
     df = pd.DataFrame({"name": ["foo", "bar"], "id": [1, 2]})
@@ -130,7 +135,9 @@ def test_assert_polars_dataframe_snapshot() -> pl.DataFrame:
 
 
 @pytest.mark.skipif(
-    POLARS_UNAVAILABLE or (sys.version_info.major != 3 or sys.version_info.minor != 13),
+    POLARS_UNAVAILABLE
+    or (sys.version_info.major != 3 or sys.version_info.minor != 13)
+    or platform.system() != "Darwin",
     reason="Polars is an optional dependency",
 )
 @snapshot(dataframe_snapshot_format="bin")
@@ -209,7 +216,7 @@ def test_snapshot_contents_json():
 
 
 def test_save_snapshot_path_in_advance():
-    snapshot_that_will_be_created = extract_from_pytest_env().next_snapshot_path()
+    snapshot_that_will_be_created = extract_from_pytest_env().next_snapshot_path(None)
     expected = "expected_result_1"
     assert_snapshot(expected)
     snapshot = PySnapshot.from_file(snapshot_that_will_be_created)
@@ -219,5 +226,47 @@ def test_save_snapshot_path_in_advance():
 def test_snapshot_then_load():
     expected = "expected_result_1"
     assert_snapshot(expected)
-    snapshot = PySnapshot.from_file(extract_from_pytest_env().last_snapshot_path())
+    snapshot = PySnapshot.from_file(extract_from_pytest_env().last_snapshot_path(None))
     assert snapshot.contents().decode() == expected
+
+
+def test_mock_or_json_snapshot():
+    def add(x, y):
+        return {"sum": x + y, "x": x, "y": y}
+
+    mocked = mock_json_snapshot(func=add)
+    result = mocked(1, y=2)
+    assert isinstance(result, dict)
+    assert result["sum"] == 3
+    assert result["x"] == 1
+    assert result["y"] == 2
+
+
+def test_mock_or_json_snapshot_diff_args():
+    def add(x, y):
+        return {"sum": x + y, "x": x, "y": y}
+
+    mocked = mock_json_snapshot(func=add)
+    result = mocked(1, y=2)
+    assert isinstance(result, dict)
+    assert result["sum"] == 3
+    assert result["x"] == 1
+    assert result["y"] == 2
+
+    result = mocked(1, 3)
+    assert isinstance(result, dict)
+    assert result["sum"] == 4
+    assert result["x"] == 1
+    assert result["y"] == 3
+
+
+def test_mock_or_json_snapshot_redactions():
+    def add(x, y):
+        return {"sum": x + y, "x": x, "y": y}
+
+    mocked = mock_json_snapshot(func=add, redactions={".sum": "[redacted]"})
+    result = mocked(1, 2)
+    assert isinstance(result, dict)
+    assert result["sum"] == "[redacted]"
+    assert result["x"] == 1
+    assert result["y"] == 2

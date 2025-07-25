@@ -1,0 +1,12 @@
+---
+source: src/lib.rs
+description: "Test File Path: tests/test_snapshots.py"
+---
+{
+  "args": [
+    1
+  ],
+  "kwargs": {
+    "y": 2
+  }
+}
