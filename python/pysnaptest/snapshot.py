@@ -233,7 +233,12 @@ def insta_snapshot(
     else:
         if redactions is not None:
             raise ValueError("Redactions may only be used with json or csv snapshots.")
-        assert_snapshot(result, snapshot_path, snapshot_name)
+        assert_snapshot(
+            result,
+            snapshot_path,
+            snapshot_name,
+            allow_duplicates=allow_duplicates,
+        )
 
 
 @overload
