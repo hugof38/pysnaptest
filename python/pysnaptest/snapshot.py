@@ -285,7 +285,13 @@ def insta_snapshot(
     allow_duplicates: bool = False,
 ):
     if isinstance(result, dict) or isinstance(result, list):
-        assert_json_snapshot(result, snapshot_path, snapshot_name, redactions)
+        assert_json_snapshot(
+            result,
+            snapshot_path,
+            snapshot_name,
+            redactions,
+            allow_duplicates,
+        )
     elif isinstance(result, bytes):
         assert_binary_snapshot(
             result,
