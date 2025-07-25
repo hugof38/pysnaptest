@@ -104,7 +104,7 @@ def assert_pandas_dataframe_snapshot(
         )
     else:
         raise ValueError(
-            "Unsupported snqpshot format for dataframes, supported formats are: 'csv', 'json', 'parquet'."
+            "Unsupported snapshot format for dataframes, supported formats are: 'csv', 'json', 'parquet'."
         )
 
 
