@@ -316,8 +316,8 @@ def snapshot(func: Callable) -> Callable: ...
 @overload
 def snapshot(
     *,
-    filename: Optional[str] = None,
-    folder_path: Optional[str] = None,
+    snapshot_path: Optional[str] = None,
+    snapshot_name: Optional[str] = None,
     redactions: Optional[Dict[str, str | int | None]] = None,
     dataframe_snapshot_format: str = "csv",
     allow_duplicates: bool = False,
