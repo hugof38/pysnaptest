@@ -7,6 +7,7 @@ import json
 from pysnaptest import (
     snapshot,
     assert_json_snapshot,
+    assert_csv_snapshot,
     assert_dataframe_snapshot,
     assert_binary_snapshot,
     sorted_redaction,
@@ -97,6 +98,10 @@ def test_assert_snapshot():
 
 def test_assert_binary_snapshot():
     assert_binary_snapshot(b"expected_result", extension="txt")
+
+
+def test_assert_csv_snapshot_simple():
+    assert_csv_snapshot("a,b\n1,2")
 
 
 @pytest.mark.skipif(PANDAS_UNAVAILABLE, reason="Pandas is an optional dependency")
