@@ -29,6 +29,12 @@ const PYSNAPSHOT_SUFFIX: &str = "pysnap";
 static TEST_NAME_COUNTERS: Lazy<Mutex<BTreeMap<String, usize>>> =
     Lazy::new(|| Mutex::new(BTreeMap::new()));
 
+mod assertions;
+mod mocks;
+
+pub use assertions::*;
+pub use mocks::*;
+
 #[derive(Debug)]
 struct Description {
     test_file_path: String,
@@ -312,107 +318,6 @@ impl From<RedactionType> for Redaction {
     }
 }
 
-#[pyclass(unsendable)]
-#[derive(Debug)]
-pub struct PySnapshot(Snapshot);
-
-#[pymethods]
-impl PySnapshot {
-    #[staticmethod]
-    pub fn from_file(p: PathBuf) -> PyResult<Self> {
-        Ok(Self(Snapshot::from_file(&p).map_err(|e| {
-            PyValueError::new_err(format!("Unable to load snapshot from {p:?}, details: {e}",))
-        })?))
-    }
-
-    pub fn contents(&self) -> PyResult<Vec<u8>> {
-        Ok(match self.0.contents() {
-            SnapshotContents::Text(text_snapshot_contents) => {
-                text_snapshot_contents.to_string().as_bytes().to_vec()
-            }
-            SnapshotContents::Binary(items) => items.deref().to_owned(),
-        })
-    }
-}
-
-#[pyfunction]
-#[pyo3(signature = (test_info, result, redactions=None))]
-fn assert_json_snapshot(
-    test_info: &SnapshotInfo,
-    result: &Bound<'_, PyAny>,
-    redactions: Option<HashMap<String, RedactionType>>,
-) -> PyResult<()> {
-    let res: serde_json::Value = pythonize::depythonize(result)?;
-    let snapshot_name = test_info.snapshot_name();
-    let mut settings: insta::Settings = test_info.try_into()?;
-
-    for (selector, redaction) in redactions.unwrap_or_default() {
-        settings.add_redaction(selector.as_str(), redaction)
-    }
-
-    settings.bind(|| {
-        insta::assert_json_snapshot!(snapshot_name, res);
-    });
-    Ok(())
-}
-
-#[pyfunction]
-#[pyo3(signature = (test_info, result, redactions=None))]
-fn assert_csv_snapshot(
-    test_info: &SnapshotInfo,
-    result: &str,
-    redactions: Option<HashMap<String, RedactionType>>,
-) -> PyResult<()> {
-    let mut rdr = ReaderBuilder::new().from_reader(result.as_bytes());
-    let columns: Vec<Vec<serde_json::Value>> = vec![rdr
-        .headers()
-        .expect("Expects csv with headers")
-        .into_iter()
-        .map(|h| h.into())
-        .collect()];
-    let records = rdr
-        .into_deserialize()
-        .collect::<Result<Vec<Vec<serde_json::Value>>, _>>()
-        .expect("Failed to parse csv records");
-    let res: Vec<Vec<serde_json::Value>> = columns.into_iter().chain(records).collect();
-
-    let snapshot_name = test_info.snapshot_name();
-    let mut settings: insta::Settings = test_info.try_into()?;
-
-    for (selector, redaction) in redactions.unwrap_or_default() {
-        settings.add_redaction(selector.as_str(), redaction)
-    }
-
-    settings.bind(|| {
-        insta::assert_csv_snapshot!(snapshot_name, res);
-    });
-    Ok(())
-}
-
-#[pyfunction]
-fn assert_binary_snapshot(
-    test_info: &SnapshotInfo,
-    extension: &str,
-    result: Vec<u8>,
-) -> PyResult<()> {
-    let snapshot_name = test_info.snapshot_name();
-    let settings: insta::Settings = test_info.try_into()?;
-    settings.bind(|| {
-        insta::assert_binary_snapshot!(format!("{snapshot_name}.{extension}").as_str(), result);
-    });
-    Ok(())
-}
-
-#[pyfunction]
-fn assert_snapshot(test_info: &SnapshotInfo, result: &Bound<'_, PyAny>) -> PyResult<()> {
-    let snapshot_name = test_info.snapshot_name();
-    let settings: insta::Settings = test_info.try_into()?;
-    settings.bind(|| {
-        insta::assert_snapshot!(snapshot_name, result);
-    });
-    Ok(())
-}
-
 macro_rules! snapshot_fn_auto {
     ($f:expr $(, $arg:ident )* ; serialize_macro = $serialize_macro:ident ; result_from_str=$result_from_str:expr) => {{
         let f = $f;
@@ -502,106 +407,6 @@ macro_rules! assert_json_snapshot_depythonize {
             assert_json_snapshot_macro!($snapshot_name, input_tuple);
         });
     }};
-}
-
-#[pyclass]
-#[allow(clippy::type_complexity)]
-struct PyMockWrapper {
-    f: Box<
-        dyn for<'a> Fn(
-                &'a Bound<'_, PyTuple>,
-                Option<&'a Bound<'_, PyDict>>,
-                &'a SnapshotInfo,
-                Option<HashMap<String, RedactionType>>,
-                bool,
-            ) -> Result<Py<PyAny>, anyhow::Error>
-            + Send
-            + Sync,
-    >,
-    snapshot_info: SnapshotInfo,
-    record: bool,
-    redactions: Option<HashMap<String, RedactionType>>,
-}
-
-#[pymethods]
-impl PyMockWrapper {
-    #[pyo3(signature = (*args, **kwargs))]
-    fn __call__(
-        &self,
-        args: &Bound<'_, PyTuple>,
-        kwargs: Option<&Bound<'_, PyDict>>,
-    ) -> PyResult<PyObject> {
-        (self.f)(
-            args,
-            kwargs,
-            &self.snapshot_info,
-            self.redactions.clone(),
-            self.record,
-        )
-        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
-    }
-}
-
-#[allow(clippy::type_complexity)]
-fn wrap_py_fn_snapshot_json(
-    py_fn: PyObject,
-) -> impl for<'b> Fn(
-    &'b Bound<'_, PyTuple>,
-    Option<&'b Bound<'_, PyDict>>,
-    &'b SnapshotInfo,
-    Option<HashMap<String, RedactionType>>,
-    bool,
-) -> Result<Py<PyAny>, anyhow::Error>
-       + Send
-       + Sync {
-    move |args: &Bound<'_, PyTuple>,
-          kwargs: Option<&Bound<'_, _>>,
-          info: &SnapshotInfo,
-          redactions: Option<HashMap<String, RedactionType>>,
-          record: bool| {
-        let py_fn_cloned = Python::with_gil(|py| py_fn.clone_ref(py));
-
-        let call_fn =
-            move |args: &Bound<'_, PyTuple>, kwargs: Option<&Bound<'_, _>>| -> PyResult<PyObject> {
-                Python::with_gil(|py| py_fn_cloned.call(py, args, kwargs))
-            };
-
-        let wrapped_fn = snapshot_fn_auto_json!(
-            call_fn, args, kwargs;
-            serialize_macro=assert_json_snapshot_depythonize;
-            result_from_str=|content: String| -> PyResult<PyObject> {
-                Python::with_gil(|py| {
-                    let value: serde_json::Value = serde_json::from_str(&content)
-                        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
-                    let obj = pythonize::pythonize(py, &value)?;
-                    Ok(obj.into())
-                })
-            }
-        );
-
-        wrapped_fn(args, kwargs, info, redactions, record)
-    }
-}
-
-#[pyfunction]
-fn mock_json_snapshot(
-    py_fn: PyObject,
-    snapshot_info: SnapshotInfo,
-    record: bool,
-    redactions: Option<HashMap<String, RedactionType>>,
-) -> PyResult<PyObject> {
-    Python::with_gil(|py| {
-        let callable = Py::new(
-            py,
-            PyMockWrapper {
-                f: Box::new(wrap_py_fn_snapshot_json(py_fn)),
-                snapshot_info,
-                record,
-                redactions,
-            },
-        )?;
-        Ok(callable.into())
-    })
 }
 
 #[pymodule]
