@@ -79,7 +79,13 @@ cargo-insta review
 ```
 
 This command presents an interactive diff viewer where you can approve or reject
-changes.
+changes. Snapshot files are saved under a `snapshots` directory next to each test
+module. Set the environment variable `INSTA_WORKSPACE_ROOT` when running your
+tests so both the library and `cargo-insta` know where snapshots are stored. In
+the example project the tests are inside a `tests` folder, so `pytest.ini` sets
+`INSTA_WORKSPACE_ROOT=tests`, allowing the CLI to find
+`examples/my_project/tests/snapshots`.
+
 
 ## Examples
 
