@@ -1,5 +1,5 @@
 ---
-source: src/lib.rs
+source: src/common.rs
 expression: snapshot_info
 ---
 SnapshotInfo {

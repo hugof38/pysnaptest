@@ -1,5 +1,5 @@
 # ruff: noqa: F401
-from .snapshot import (
+from .assertion import (
     snapshot,
     assert_json_snapshot,
     assert_csv_snapshot,
@@ -9,7 +9,6 @@ from .snapshot import (
     sorted_redaction,
     rounded_redaction,
     extract_from_pytest_env,
-    mock_json_snapshot,
-    patch_json_snapshot,
 )
+from .mocks import mock_json_snapshot, patch_json_snapshot
 from ._pysnaptest import PySnapshot
