@@ -229,7 +229,7 @@ mod tests {
         Bound, IntoPyObject, Py, PyAny, PyResult, Python,
     };
 
-    use crate::{mock_json_snapshot, SnapshotInfo};
+    use crate::{handle_insta_panic, mock_json_snapshot, SnapshotInfo};
 
     fn snapshot_folder_path() -> PathBuf {
         // This env var points to the root of your crate during cargo test/build
