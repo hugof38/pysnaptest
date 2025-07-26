@@ -93,7 +93,7 @@ def test_assert_json_snapshot():
 
 
 def test_assert_snapshot():
-    assert_json_snapshot("expected_result")
+    assert_snapshot("expected_result")
 
 
 def test_assert_binary_snapshot():
