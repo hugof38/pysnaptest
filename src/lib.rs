@@ -7,9 +7,11 @@ use pyo3::{
 };
 
 mod common;
+mod errors;
 mod mocks;
 
 pub use common::*;
+pub use errors::*;
 pub use mocks::*;
 
 use std::{collections::HashMap, path::PathBuf};

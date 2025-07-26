@@ -6,6 +6,7 @@ use insta::Snapshot;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyTuple};
 
+use crate::errors::{SnapError, SnapResult};
 use crate::{RedactionType, SnapshotInfo};
 
 macro_rules! snapshot_fn_auto {
@@ -14,7 +15,7 @@ macro_rules! snapshot_fn_auto {
         let name = stringify!($f);
         let module_path = module_path!();
 
-        move |$( $arg ),+, info: &SnapshotInfo, redactions: Option<HashMap<String, RedactionType>>, record: bool| -> Result<_, anyhow::Error> {
+        move |$( $arg ),+, info: &SnapshotInfo, redactions: Option<HashMap<String, RedactionType>>, record: bool| -> SnapResult<_> {
             let finfo = SnapshotInfo {
                 snapshot_name: format!("{}_{}", info.snapshot_name, name),
                 ..info.clone()
@@ -41,15 +42,17 @@ macro_rules! snapshot_fn_auto {
                 Ok(result)
             } else {
                 match Snapshot::from_file(&snapshot_path)
-                    .map_err(|e| anyhow::anyhow!(e.to_string()))?
+                    .map_err(SnapError::from)?
                     .contents()
                 {
                     SnapshotContents::Text(content) => {
                         Ok(($result_from_str)(content.to_string())?)
                     },
-                    SnapshotContents::Binary(_) => Err(anyhow::anyhow!(
-                        "Snapshot at {:?} is binary, which is not supported for deserialization",
-                        snapshot_path
+                    SnapshotContents::Binary(_) => Err(SnapError::from(
+                        format!(
+                            "Snapshot at {:?} is binary, which is not supported for deserialization",
+                            snapshot_path
+                        ),
                     )),
                 }
             }
@@ -109,7 +112,7 @@ pub struct PyMockWrapper {
                 &'a SnapshotInfo,
                 Option<HashMap<String, RedactionType>>,
                 bool,
-            ) -> Result<Py<PyAny>, anyhow::Error>
+            ) -> SnapResult<Py<PyAny>>
             + Send
             + Sync,
     >,
@@ -146,7 +149,7 @@ fn wrap_py_fn_snapshot_json(
     &'b SnapshotInfo,
     Option<HashMap<String, RedactionType>>,
     bool,
-) -> Result<Py<PyAny>, anyhow::Error>
+) -> SnapResult<Py<PyAny>>
        + Send
        + Sync {
     move |args: &Bound<'_, PyTuple>,
@@ -156,19 +159,19 @@ fn wrap_py_fn_snapshot_json(
           record: bool| {
         let py_fn_cloned = Python::with_gil(|py| py_fn.clone_ref(py));
 
-        let call_fn =
-            move |args: &Bound<'_, PyTuple>, kwargs: Option<&Bound<'_, _>>| -> PyResult<PyObject> {
-                Python::with_gil(|py| py_fn_cloned.call(py, args, kwargs))
-            };
+        let call_fn = move |args: &Bound<'_, PyTuple>,
+                            kwargs: Option<&Bound<'_, _>>|
+              -> SnapResult<PyObject> {
+            Python::with_gil(|py| py_fn_cloned.call(py, args, kwargs)).map_err(SnapError::from)
+        };
 
         let wrapped_fn = snapshot_fn_auto_json!(
             call_fn, args, kwargs;
             serialize_macro=assert_json_snapshot_depythonize;
-            result_from_str=|content: String| -> PyResult<PyObject> {
+            result_from_str=|content: String| -> SnapResult<PyObject> {
                 Python::with_gil(|py| {
-                    let value: serde_json::Value = serde_json::from_str(&content)
-                        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
-                    let obj = pythonize::pythonize(py, &value)?;
+                    let value: serde_json::Value = serde_json::from_str(&content)?;
+                    let obj = pythonize::pythonize(py, &value).map_err(SnapError::from)?;
                     Ok(obj.into())
                 })
             }
@@ -203,7 +206,7 @@ pub fn mock_json_snapshot(
 mod tests {
     use std::collections::HashMap;
 
-    use crate::RedactionType;
+    use crate::{RedactionType, SnapError, SnapResult};
     use insta::assert_json_snapshot as assert_json_snapshot_macro;
     use insta::internals::SnapshotContents;
     use insta::Snapshot;
@@ -228,7 +231,7 @@ mod tests {
     }
 
     #[test]
-    fn test_snapshot_json_or_mock_creates_and_reads_snapshot() -> Result<(), anyhow::Error> {
+    fn test_snapshot_json_or_mock_creates_and_reads_snapshot() -> SnapResult<()> {
         let input_1 = 4;
 
         // Shared counter to track how many times the function is called
@@ -237,7 +240,7 @@ mod tests {
 
         let f = |i| {
             call_count_clone.set(call_count_clone.get() + 1);
-            Ok::<_, anyhow::Error>(i * 2)
+            Ok::<_, SnapError>(i * 2)
         };
 
         let snaphot_folder_path = snapshot_folder_path();
@@ -272,7 +275,7 @@ mod tests {
     }
 
     #[test]
-    fn test_create_mocked_pyfn_creates_and_reads_snapshot() -> Result<(), anyhow::Error> {
+    fn test_create_mocked_pyfn_creates_and_reads_snapshot() -> SnapResult<()> {
         pyo3::prepare_freethreaded_python();
         let snapshot_info = SnapshotInfo {
             snapshot_name: "test_create_mocked_pyfn".to_string(),

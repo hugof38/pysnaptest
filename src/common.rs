@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::env::VarError;
 use std::ops::Deref;
 use std::path::PathBuf;
 use std::str::{self, FromStr};
@@ -10,6 +9,8 @@ use once_cell::sync::Lazy;
 
 use pyo3::FromPyObject;
 use pyo3::{exceptions::PyValueError, pyclass, pymethods, Bound, PyAny, PyErr, PyResult};
+
+use crate::errors::PytestInfoError;
 
 use insta::internals::{Redaction, SnapshotContents};
 use insta::{rounded_redaction, sorted_redaction, Snapshot};
@@ -43,37 +44,13 @@ pub(crate) struct PytestInfo {
     test_name: String,
 }
 
-#[derive(Debug)]
-pub(crate) enum Error {
-    CouldNotSplit(String),
-    InvalidEnvVar(VarError),
-    NoTestFile,
-}
-
-impl From<Error> for PyErr {
-    fn from(value: Error) -> Self {
-        match value {
-            Error::CouldNotSplit(s) => PyValueError::new_err(format!(
-                "Expected '::' to be in PYTEST_CURRENT_TEST string ({s})"
-            )),
-            Error::InvalidEnvVar(ve) => match ve {
-                VarError::NotPresent => PyValueError::new_err("PYTEST_CURRENT_TEST is not set"),
-                VarError::NotUnicode(os_string) => PyValueError::new_err(format!(
-                    "PYTEST_CURRENT_TEST is not a valid unicode string: {os_string:#?}"
-                )),
-            },
-            Error::NoTestFile => PyValueError::new_err("No test file found"),
-        }
-    }
-}
-
 impl PytestInfo {
-    pub fn from_env() -> Result<Self, Error> {
-        let pytest_str = env::var("PYTEST_CURRENT_TEST").map_err(Error::InvalidEnvVar)?;
+    pub fn from_env() -> Result<Self, PytestInfoError> {
+        let pytest_str = env::var("PYTEST_CURRENT_TEST").map_err(PytestInfoError::InvalidEnvVar)?;
         pytest_str.parse()
     }
 
-    pub fn test_path(&self) -> Result<PathBuf, Error> {
+    pub fn test_path(&self) -> Result<PathBuf, PytestInfoError> {
         let path = self.test_path_raw();
         if path.exists() {
             Ok(path)
@@ -82,7 +59,7 @@ impl PytestInfo {
             filepath.push(filename);
             Ok(filepath)
         } else {
-            Err(Error::NoTestFile)
+            Err(PytestInfoError::NoTestFile)
         }
     }
 
@@ -92,12 +69,12 @@ impl PytestInfo {
 }
 
 impl FromStr for PytestInfo {
-    type Err = Error;
+    type Err = PytestInfoError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (test_path, test_name_and_stage) = s
             .split_once("::")
-            .ok_or(Error::CouldNotSplit(s.to_string()))?;
+            .ok_or(PytestInfoError::CouldNotSplit(s.to_string()))?;
 
         let test_name = test_name_and_stage
             .split_once(" ")
@@ -260,21 +237,21 @@ mod tests {
     #[test]
     fn test_into_pyinfo_happy_path() {
         let s = "tests/a/b/test_thing.py::test_a (call)";
-        let pti: Result<PytestInfo, Error> = s.parse();
+        let pti: Result<PytestInfo, PytestInfoError> = s.parse();
         insta::assert_debug_snapshot!(pti)
     }
 
     #[test]
     fn test_into_pyinfo_no_trailer() {
         let s = "tests/a/b/test_thing.py::test_a";
-        let pti: Result<PytestInfo, Error> = s.parse();
+        let pti: Result<PytestInfo, PytestInfoError> = s.parse();
         insta::assert_debug_snapshot!(pti)
     }
 
     #[test]
     fn test_into_pyinfo_failure_case() {
         let s = "tests/a/b/test_thing.py";
-        let pti: Result<PytestInfo, Error> = s.parse();
+        let pti: Result<PytestInfo, PytestInfoError> = s.parse();
         insta::assert_debug_snapshot!(pti)
     }
 
