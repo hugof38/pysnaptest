@@ -131,7 +131,7 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 /// Execute an Insta assertion, converting any panic into a `SnapError`.
 pub(crate) fn handle_insta_panic<F, T>(f: F) -> SnapResult<T>
 where
-    F: FnOnce() -> T + std::panic::UnwindSafe,
+    F: FnOnce() -> T,
 {
     match catch_unwind(AssertUnwindSafe(f)) {
         Ok(v) => Ok(v),
@@ -151,7 +151,7 @@ where
 /// Similar to [`handle_insta_panic`] but returns a `PyErr` directly.
 pub(crate) fn handle_insta_panic_py<F>(f: F) -> PyResult<()>
 where
-    F: FnOnce() + std::panic::UnwindSafe,
+    F: FnOnce(),
 {
     handle_insta_panic(|| {
         f();
