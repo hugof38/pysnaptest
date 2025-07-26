@@ -60,7 +60,7 @@ def test_use_http_request():
 ## Updating Snapshots
 
 If the output changes intentionally, you can review and update snapshots using
-`cargo insta review`. The tool used for this, `cargo-insta`, is distributed via
+`cargo-insta review`. The tool used for this, `cargo-insta`, is distributed via
 Rust's package manager `cargo`.
 
 ### Installing `cargo-insta`
@@ -75,7 +75,7 @@ cargo install cargo-insta
 With the binary on your `PATH` you can review snapshots using:
 
 ```bash
-cargo insta review
+cargo-insta review
 ```
 
 This command presents an interactive diff viewer where you can approve or reject
