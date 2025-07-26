@@ -34,10 +34,11 @@ pub fn assert_json_snapshot(
         settings.add_redaction(selector.as_str(), redaction);
     }
 
-    settings.bind(|| {
-        insta::assert_json_snapshot!(snapshot_name, res);
-    });
-    Ok(())
+    handle_insta_panic_py(|| {
+        settings.bind(|| {
+            insta::assert_json_snapshot!(snapshot_name, res);
+        });
+    })
 }
 
 #[pyfunction]
@@ -67,10 +68,11 @@ pub fn assert_csv_snapshot(
         settings.add_redaction(selector.as_str(), redaction);
     }
 
-    settings.bind(|| {
-        insta::assert_csv_snapshot!(snapshot_name, res);
-    });
-    Ok(())
+    handle_insta_panic_py(|| {
+        settings.bind(|| {
+            insta::assert_csv_snapshot!(snapshot_name, res);
+        });
+    })
 }
 
 #[pyfunction]
@@ -81,20 +83,22 @@ pub fn assert_binary_snapshot(
 ) -> PyResult<()> {
     let snapshot_name = test_info.snapshot_name();
     let settings: insta::Settings = test_info.try_into()?;
-    settings.bind(|| {
-        insta::assert_binary_snapshot!(format!("{snapshot_name}.{extension}").as_str(), result);
-    });
-    Ok(())
+    handle_insta_panic_py(|| {
+        settings.bind(|| {
+            insta::assert_binary_snapshot!(format!("{snapshot_name}.{extension}").as_str(), result);
+        });
+    })
 }
 
 #[pyfunction]
 pub fn assert_snapshot(test_info: &SnapshotInfo, result: &Bound<'_, PyAny>) -> PyResult<()> {
     let snapshot_name = test_info.snapshot_name();
     let settings: insta::Settings = test_info.try_into()?;
-    settings.bind(|| {
-        insta::assert_snapshot!(snapshot_name, result);
-    });
-    Ok(())
+    handle_insta_panic_py(|| {
+        settings.bind(|| {
+            insta::assert_snapshot!(snapshot_name, result);
+        });
+    })
 }
 
 #[pymethods]
