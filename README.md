@@ -100,6 +100,31 @@ pytest
 
 Feel free to explore, modify, and build upon these examples for your own projects!
 
+## Benchmarks
+
+Below are some preliminary benchmark results comparing `pysnaptest` to
+[`syrupy`](https://github.com/tophat/syrupy). The numbers were generated using
+`pytest-benchmark` and are provided to give a general idea of runtime
+performance.
+
+```
+------------------------------------------------------------------------------------------------------- benchmark: 4 tests -------------------------------------------------------------------------------------------------------
+Name (time in us)                            Min                     Max                    Mean                StdDev                  Median                   IQR            Outliers         OPS            Rounds  Iterations
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+test_pysnaptest_benchmark[10]           144.2080 (1.0)          224.8750 (1.0)          151.9010 (1.0)         16.6605 (1.0)          146.6665 (1.0)          5.1665 (1.0)           2;3  6,583.2353 (1.0)          24           1
+test_syrupy_benchmark[10]               171.2920 (1.19)         242.0420 (1.08)         184.7244 (1.22)        21.8456 (1.31)         175.3750 (1.20)         9.9587 (1.93)          2;2  5,413.4703 (0.82)         13           1
+test_pysnaptest_benchmark[1000]     266,551.1670 (>1000.0)  269,829.4590 (>1000.0)  268,094.9420 (>1000.0)  1,287.9046 (77.30)    267,992.9170 (>1000.0)  1,995.2603 (386.19)        2;0      3.7300 (0.00)          5           1
+test_syrupy_benchmark[1000]         774,865.1250 (>1000.0)  779,754.2500 (>1000.0)  777,922.5250 (>1000.0)  1,949.4904 (117.01)   778,594.3330 (>1000.0)  2,682.1555 (519.14)        1;0      1.2855 (0.00)          5           1
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Legend:
+  Outliers: 1 Standard Deviation from Mean; 1.5 IQR (InterQuartile Range) from 1st Quartile and 3rd Quartile.
+  OPS: Operations Per Second, computed as 1 / Mean
+```
+
+If the `syrupy` benchmarks above are not executed optimally, contributions are
+very welcome to help benchmark more accurately.
+
 ## Contributing
 
 We welcome contributions to `pysnaptest`! To get started:

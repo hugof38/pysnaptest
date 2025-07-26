@@ -16,6 +16,7 @@ requires-python = ">=3.9"
 pandas = ["pandas>=0.12.0"]
 polars = ["polars>=0.18"]
 pyarrow = ["pyarrow>=17.0.0"]
+syrupy = ["syrupy>=4.9.1"]
 
 [tool.maturin]
 bindings = 'pyo3'
