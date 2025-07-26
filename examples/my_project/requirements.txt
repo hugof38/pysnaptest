@@ -1,3 +1,3 @@
-pysnaptest==0.1.0
+pysnaptest==0.4.0
 pytest==8.3.4
 pytest-env==1.1.5
