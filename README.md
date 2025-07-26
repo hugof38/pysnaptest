@@ -29,7 +29,7 @@ function:
 ```python
 from pysnaptest import snapshot
 
-@snapshot()
+@snapshot
 def test_basic():
     return {"hello": "world"}
 ```
@@ -52,7 +52,7 @@ from pysnaptest import patch_json_snapshot, snapshot
 from my_project.main import use_http_request
 
 @patch_json_snapshot("my_project.main.http_request")
-@snapshot()
+@snapshot
 def test_use_http_request():
     return use_http_request()
 ```
