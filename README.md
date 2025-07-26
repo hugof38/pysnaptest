@@ -21,18 +21,65 @@ You can install `pysnaptest` via pip:
 pip install pysnaptest
 ```
 
-## Updating Snapshots
+## Usage
 
-If the output changes intentionally, you can review and update snapshots using the `cargo-insta review` command. This provides an interactive workflow to inspect changes and accept or reject updates.
+The `snapshot` decorator makes it easy to capture the return value of a test
+function:
 
-### Running Snapshot Review
+```python
+from pysnaptest import snapshot
 
-You can install `cargo-insta` binaries from [cargo-insta](https://github.com/mitsuhiko/insta/tree/master/cargo-insta). After that you should be able to review snapshots with the following:
-```bash
-cargo-insta review
+@snapshot()
+def test_basic():
+    return {"hello": "world"}
 ```
 
-This command allows you to inspect differences and choose which snapshots to update.
+You can also assert snapshots directly without using a decorator:
+
+```python
+from pysnaptest import assert_json_snapshot
+
+def test_direct():
+    data = {"hello": "world"}
+    assert_json_snapshot(data)
+```
+
+For tests that call external APIs you can patch the function and snapshot its
+return value:
+
+```python
+from pysnaptest import patch_json_snapshot, snapshot
+from my_project.main import use_http_request
+
+@patch_json_snapshot("my_project.main.http_request")
+@snapshot()
+def test_use_http_request():
+    return use_http_request()
+```
+
+## Updating Snapshots
+
+If the output changes intentionally, you can review and update snapshots using
+`cargo insta review`. The tool used for this, `cargo-insta`, is distributed via
+Rust's package manager `cargo`.
+
+### Installing `cargo-insta`
+
+1. Install Rust using [rustup](https://rustup.rs/) if it is not already present.
+2. Install the CLI with:
+
+```bash
+cargo install cargo-insta
+```
+
+With the binary on your `PATH` you can review snapshots using:
+
+```bash
+cargo insta review
+```
+
+This command presents an interactive diff viewer where you can approve or reject
+changes.
 
 ## Examples
 
