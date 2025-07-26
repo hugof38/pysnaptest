@@ -1,8 +1,8 @@
 use std::env::VarError;
 use std::fmt::{self, Display, Formatter};
 
-use pyo3::PyErr;
 use pyo3::exceptions::PyValueError;
+use pyo3::PyErr;
 
 #[derive(Debug)]
 pub enum PytestInfoError {
@@ -11,28 +11,58 @@ pub enum PytestInfoError {
     NoTestFile,
 }
 
+impl Display for PytestInfoError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            PytestInfoError::CouldNotSplit(s) => {
+                write!(f, "Expected '::' to be in PYTEST_CURRENT_TEST string ({s})")
+            }
+            PytestInfoError::InvalidEnvVar(e) => match e {
+                VarError::NotPresent => write!(f, "PYTEST_CURRENT_TEST is not set"),
+                VarError::NotUnicode(os_string) => {
+                    write!(f, "PYTEST_CURRENT_TEST is not a valid unicode string: {os_string:#?}")
+                }
+            },
+            PytestInfoError::NoTestFile => write!(f, "No test file found"),
+        }
+    }
+}
+
 impl From<PytestInfoError> for PyErr {
     fn from(value: PytestInfoError) -> Self {
         match value {
-            PytestInfoError::CouldNotSplit(s) => PyValueError::new_err(format!(
-                "Expected '::' to be in PYTEST_CURRENT_TEST string ({s})"
-            )),
+            PytestInfoError::CouldNotSplit(s) => {
+                PyValueError::new_err(format!("Expected '::' to be in PYTEST_CURRENT_TEST string ({s})"))
+            }
             PytestInfoError::InvalidEnvVar(ve) => match ve {
                 VarError::NotPresent => PyValueError::new_err("PYTEST_CURRENT_TEST is not set"),
-                VarError::NotUnicode(os_string) =>
-                    PyValueError::new_err(format!("PYTEST_CURRENT_TEST is not a valid unicode string: {os_string:#?}")),
+                VarError::NotUnicode(os_string) => PyValueError::new_err(format!(
+                    "PYTEST_CURRENT_TEST is not a valid unicode string: {os_string:#?}"
+                )),
             },
             PytestInfoError::NoTestFile => PyValueError::new_err("No test file found"),
         }
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct SnapError(pub String);
+#[derive(Debug)]
+pub enum SnapError {
+    Msg(String),
+    Io(std::io::Error),
+    Json(serde_json::Error),
+    Py(PyErr),
+    PytestInfo(PytestInfoError),
+}
 
 impl Display for SnapError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
+        match self {
+            SnapError::Msg(m) => write!(f, "{m}"),
+            SnapError::Io(e) => write!(f, "{e}"),
+            SnapError::Json(e) => write!(f, "{e}"),
+            SnapError::Py(e) => write!(f, "{e}"),
+            SnapError::PytestInfo(e) => write!(f, "{e}"),
+        }
     }
 }
 
@@ -40,31 +70,37 @@ impl std::error::Error for SnapError {}
 
 impl From<String> for SnapError {
     fn from(value: String) -> Self {
-        Self(value)
+        SnapError::Msg(value)
     }
 }
 
 impl From<&str> for SnapError {
     fn from(value: &str) -> Self {
-        Self(value.to_string())
+        SnapError::Msg(value.to_string())
     }
 }
 
 impl From<std::io::Error> for SnapError {
     fn from(value: std::io::Error) -> Self {
-        Self(value.to_string())
+        SnapError::Io(value)
     }
 }
 
 impl From<serde_json::Error> for SnapError {
     fn from(value: serde_json::Error) -> Self {
-        Self(value.to_string())
+        SnapError::Json(value)
     }
 }
 
 impl From<PyErr> for SnapError {
     fn from(value: PyErr) -> Self {
-        Self(value.to_string())
+        SnapError::Py(value)
+    }
+}
+
+impl From<PytestInfoError> for SnapError {
+    fn from(value: PytestInfoError) -> Self {
+        SnapError::PytestInfo(value)
     }
 }
 
