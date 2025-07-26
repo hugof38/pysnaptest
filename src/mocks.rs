@@ -159,11 +159,11 @@ fn wrap_py_fn_snapshot_json(
           record: bool| {
         let py_fn_cloned = Python::with_gil(|py| py_fn.clone_ref(py));
 
-        let call_fn =
-            move |args: &Bound<'_, PyTuple>, kwargs: Option<&Bound<'_, _>>| -> SnapResult<PyObject> {
-                Python::with_gil(|py| py_fn_cloned.call(py, args, kwargs))
-                    .map_err(SnapError::from)
-            };
+        let call_fn = move |args: &Bound<'_, PyTuple>,
+                            kwargs: Option<&Bound<'_, _>>|
+              -> SnapResult<PyObject> {
+            Python::with_gil(|py| py_fn_cloned.call(py, args, kwargs)).map_err(SnapError::from)
+        };
 
         let wrapped_fn = snapshot_fn_auto_json!(
             call_fn, args, kwargs;

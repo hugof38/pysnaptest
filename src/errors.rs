@@ -21,7 +21,10 @@ impl Display for PytestInfoError {
             PytestInfoError::InvalidEnvVar(e) => match e {
                 VarError::NotPresent => write!(f, "PYTEST_CURRENT_TEST is not set"),
                 VarError::NotUnicode(os_string) => {
-                    write!(f, "PYTEST_CURRENT_TEST is not a valid unicode string: {os_string:#?}")
+                    write!(
+                        f,
+                        "PYTEST_CURRENT_TEST is not a valid unicode string: {os_string:#?}"
+                    )
                 }
             },
             PytestInfoError::NoTestFile => write!(f, "No test file found"),
@@ -32,9 +35,9 @@ impl Display for PytestInfoError {
 impl From<PytestInfoError> for PyErr {
     fn from(value: PytestInfoError) -> Self {
         match value {
-            PytestInfoError::CouldNotSplit(s) => {
-                PyValueError::new_err(format!("Expected '::' to be in PYTEST_CURRENT_TEST string ({s})"))
-            }
+            PytestInfoError::CouldNotSplit(s) => PyValueError::new_err(format!(
+                "Expected '::' to be in PYTEST_CURRENT_TEST string ({s})"
+            )),
             PytestInfoError::InvalidEnvVar(ve) => match ve {
                 VarError::NotPresent => PyValueError::new_err("PYTEST_CURRENT_TEST is not set"),
                 VarError::NotUnicode(os_string) => PyValueError::new_err(format!(
@@ -54,7 +57,7 @@ pub enum SnapError {
     Py(PyErr),
     PytestInfo(PytestInfoError),
     Pythonize(PythonizeError),
-    Other(Box<dyn std::error::Error>)
+    Other(Box<dyn std::error::Error>),
 }
 
 impl Display for SnapError {

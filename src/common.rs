@@ -44,7 +44,6 @@ pub(crate) struct PytestInfo {
     test_name: String,
 }
 
-
 impl PytestInfo {
     pub fn from_env() -> Result<Self, PytestInfoError> {
         let pytest_str = env::var("PYTEST_CURRENT_TEST").map_err(PytestInfoError::InvalidEnvVar)?;
