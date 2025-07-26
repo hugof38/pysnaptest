@@ -9,10 +9,7 @@ use std::{env, path::Path};
 use once_cell::sync::Lazy;
 
 use pyo3::FromPyObject;
-use pyo3::{
-    exceptions::PyValueError,
-    pyclass, pymethods, PyErr, PyResult, Bound, PyAny,
-};
+use pyo3::{exceptions::PyValueError, pyclass, pymethods, Bound, PyAny, PyErr, PyResult};
 
 use insta::internals::{Redaction, SnapshotContents};
 use insta::{rounded_redaction, sorted_redaction, Snapshot};
@@ -297,5 +294,4 @@ mod tests {
         insta::assert_snapshot!(snapshot_info.last_snapshot_name(), @"snapshot_name_override-2");
         insta::assert_snapshot!(snapshot_info.next_snapshot_name(), @"snapshot_name_override-3");
     }
-
 }

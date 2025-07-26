@@ -1,15 +1,16 @@
 #![deny(clippy::unwrap_used)]
 
-use pyo3::{pymodule,
+use pyo3::{
+    pymodule,
     types::{PyModule, PyModuleMethods},
     wrap_pyfunction, Bound, PyResult,
 };
 
-mod mocks;
 mod common;
+mod mocks;
 
-pub use mocks::*;
 pub use common::*;
+pub use mocks::*;
 
 use std::{collections::HashMap, path::PathBuf};
 
@@ -169,7 +170,6 @@ impl SnapshotInfo {
         )))
     }
 }
-
 
 #[pymodule]
 #[pyo3(name = "_pysnaptest")]

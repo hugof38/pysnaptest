@@ -71,4 +71,3 @@ class patch_json_snapshot:
                 return func(*args, **kwargs)
 
         return wrapper
-

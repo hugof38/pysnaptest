@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 
+use insta::assert_json_snapshot as assert_json_snapshot_macro;
+use insta::internals::SnapshotContents;
+use insta::Snapshot;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyTuple};
-use insta::assert_json_snapshot as assert_json_snapshot_macro;
-use insta::Snapshot;
-use insta::internals::SnapshotContents;
 
 use crate::{RedactionType, SnapshotInfo};
 
@@ -203,18 +203,21 @@ pub fn mock_json_snapshot(
 mod tests {
     use std::collections::HashMap;
 
+    use crate::RedactionType;
+    use insta::assert_json_snapshot as assert_json_snapshot_macro;
+    use insta::internals::SnapshotContents;
+    use insta::Snapshot;
     use std::{
         cell::Cell,
         ffi::CString,
         path::{Path, PathBuf},
         rc::Rc,
     };
-    use insta::Snapshot;
-    use insta::internals::SnapshotContents;
-    use insta::assert_json_snapshot as assert_json_snapshot_macro;
-    use crate::RedactionType;
 
-    use pyo3::{types::{PyAnyMethods, PyDict, PyModule, PyTuple}, Bound, IntoPyObject, Py, PyAny, PyResult, Python};
+    use pyo3::{
+        types::{PyAnyMethods, PyDict, PyModule, PyTuple},
+        Bound, IntoPyObject, Py, PyAny, PyResult, Python,
+    };
 
     use crate::{mock_json_snapshot, SnapshotInfo};
 

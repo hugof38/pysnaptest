@@ -304,4 +304,3 @@ def snapshot(  # noqa: F811
         return wraps(func)(partial(asserted_func, func))
 
     return decorator
-
