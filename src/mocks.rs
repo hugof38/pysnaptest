@@ -6,7 +6,7 @@ use insta::Snapshot;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyTuple};
 
-use crate::errors::{SnapError, SnapResult};
+use crate::errors::{handle_insta_panic, SnapError, SnapResult};
 use crate::{RedactionType, SnapshotInfo};
 
 macro_rules! snapshot_fn_auto {
@@ -29,16 +29,23 @@ macro_rules! snapshot_fn_auto {
             }
 
             // Serialize the input using the passed closure
-            settings.bind(|| {
-                $serialize_macro!(format!("{snapshot_name}-request"), ($( $arg ),+));
-            });
+            handle_insta_panic(|| {
+                settings.bind(|| {
+                    $serialize_macro!(
+                        format!("{snapshot_name}-request"),
+                        ($( $arg ),+)
+                    );
+                });
+            })?;
 
 
             if record || !snapshot_path.exists() {
                 let result = f($( $arg ),+)?;
-                settings.bind(|| {
-                    $serialize_macro!(snapshot_name, result);
-                });
+                handle_insta_panic(|| {
+                    settings.bind(|| {
+                        $serialize_macro!(snapshot_name, result);
+                    });
+                })?;
                 Ok(result)
             } else {
                 match Snapshot::from_file(&snapshot_path)
@@ -222,7 +229,7 @@ mod tests {
         Bound, IntoPyObject, Py, PyAny, PyResult, Python,
     };
 
-    use crate::{mock_json_snapshot, SnapshotInfo};
+    use crate::{handle_insta_panic, mock_json_snapshot, SnapshotInfo};
 
     fn snapshot_folder_path() -> PathBuf {
         // This env var points to the root of your crate during cargo test/build

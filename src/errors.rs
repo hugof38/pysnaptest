@@ -2,7 +2,7 @@ use std::env::VarError;
 use std::fmt::{self, Display, Formatter};
 
 use pyo3::exceptions::PyValueError;
-use pyo3::PyErr;
+use pyo3::{PyErr, PyResult};
 use pythonize::PythonizeError;
 
 #[derive(Debug)]
@@ -125,3 +125,36 @@ impl From<PytestInfoError> for SnapError {
 }
 
 pub type SnapResult<T> = Result<T, SnapError>;
+
+use std::panic::{catch_unwind, AssertUnwindSafe};
+
+/// Execute an Insta assertion, converting any panic into a `SnapError`.
+pub(crate) fn handle_insta_panic<F, T>(f: F) -> SnapResult<T>
+where
+    F: FnOnce() -> T,
+{
+    match catch_unwind(AssertUnwindSafe(f)) {
+        Ok(v) => Ok(v),
+        Err(err) => {
+            let msg = if let Some(s) = err.downcast_ref::<String>() {
+                s.clone()
+            } else if let Some(s) = err.downcast_ref::<&str>() {
+                (*s).to_string()
+            } else {
+                "snapshot assertion failed".to_string()
+            };
+            Err(SnapError::Msg(msg))
+        }
+    }
+}
+
+/// Similar to [`handle_insta_panic`] but returns a `PyErr` directly.
+pub(crate) fn handle_insta_panic_py<F>(f: F) -> PyResult<()>
+where
+    F: FnOnce(),
+{
+    handle_insta_panic(|| {
+        f();
+    })
+    .map_err(|e| pyo3::exceptions::PyAssertionError::new_err(e.to_string()))
+}
