@@ -206,7 +206,7 @@ pub fn mock_json_snapshot(
 mod tests {
     use std::collections::HashMap;
 
-    use crate::RedactionType;
+    use crate::{RedactionType, SnapError, SnapResult};
     use insta::assert_json_snapshot as assert_json_snapshot_macro;
     use insta::internals::SnapshotContents;
     use insta::Snapshot;

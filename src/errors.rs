@@ -3,6 +3,7 @@ use std::fmt::{self, Display, Formatter};
 
 use pyo3::exceptions::PyValueError;
 use pyo3::PyErr;
+use pythonize::PythonizeError;
 
 #[derive(Debug)]
 pub enum PytestInfoError {
@@ -52,6 +53,8 @@ pub enum SnapError {
     Json(serde_json::Error),
     Py(PyErr),
     PytestInfo(PytestInfoError),
+    Pythonize(PythonizeError),
+    Other(Box<dyn std::error::Error>)
 }
 
 impl Display for SnapError {
@@ -62,6 +65,8 @@ impl Display for SnapError {
             SnapError::Json(e) => write!(f, "{e}"),
             SnapError::Py(e) => write!(f, "{e}"),
             SnapError::PytestInfo(e) => write!(f, "{e}"),
+            SnapError::Pythonize(e) => write!(f, "{e}"),
+            SnapError::Other(e) => write!(f, "{e}"),
         }
     }
 }
@@ -83,6 +88,18 @@ impl From<&str> for SnapError {
 impl From<std::io::Error> for SnapError {
     fn from(value: std::io::Error) -> Self {
         SnapError::Io(value)
+    }
+}
+
+impl From<PythonizeError> for SnapError {
+    fn from(value: PythonizeError) -> Self {
+        SnapError::Pythonize(value)
+    }
+}
+
+impl From<Box<dyn std::error::Error>> for SnapError {
+    fn from(err: Box<dyn std::error::Error>) -> Self {
+        SnapError::Other(err)
     }
 }
 
