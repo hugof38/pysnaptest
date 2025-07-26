@@ -1,3 +1,9 @@
+"""Public API for :mod:`pysnaptest`.
+
+This module re-exports the most commonly used helpers so they can be imported
+directly from ``pysnaptest``.
+"""
+
 # ruff: noqa: F401
 from .assertion import (
     snapshot,
