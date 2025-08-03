@@ -309,16 +309,40 @@ def compute(x):
             let args = PyTuple::new(py, 7.into_pyobject(py))?;
 
             let result1: Bound<'_, PyDict> = wrapper.call1(args)?.extract()?;
-            assert_eq!(result1.get_item("result").unwrap().extract::<i32>()?, 70);
-            assert_eq!(result1.get_item("calls").unwrap().extract::<i32>()?, 1);
+            assert_eq!(
+                result1
+                    .get_item("result")
+                    .expect("result key missing")
+                    .extract::<i32>()?,
+                70
+            );
+            assert_eq!(
+                result1
+                    .get_item("calls")
+                    .expect("calls key missing")
+                    .extract::<i32>()?,
+                1
+            );
 
             let wrapper_obj = mock_json_snapshot(py_fn, snapshot_info.clone(), false, None)?;
             let wrapper = wrapper_obj.bind(py);
             let args = PyTuple::new(py, 7.into_pyobject(py))?;
 
             let result2: Bound<'_, PyDict> = wrapper.call1(args)?.extract()?;
-            assert_eq!(result2.get_item("result").unwrap().extract::<i32>()?, 70);
-            assert_eq!(result2.get_item("calls").unwrap().extract::<i32>()?, 1);
+            assert_eq!(
+                result2
+                    .get_item("result")
+                    .expect("result key missing")
+                    .extract::<i32>()?,
+                70
+            );
+            assert_eq!(
+                result2
+                    .get_item("calls")
+                    .expect("calls key missing")
+                    .extract::<i32>()?,
+                1
+            );
 
             Ok(())
         })?;

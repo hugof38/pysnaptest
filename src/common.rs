@@ -262,7 +262,7 @@ mod tests {
             Some("snapshot_name_override".into()),
             false,
         )
-        .unwrap();
+        .expect("snapshot info from pytest should be valid");
         insta::assert_debug_snapshot!(snapshot_info);
         insta::assert_snapshot!(snapshot_info.snapshot_name(), @"snapshot_name_override");
         insta::assert_snapshot!(snapshot_info.last_snapshot_name(), @"snapshot_name_override");
