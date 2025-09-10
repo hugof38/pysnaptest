@@ -20,6 +20,13 @@ from pysnaptest import (
 import pytest
 
 try:
+    from pydantic import BaseModel
+
+    PYDANTIC_UNAVAILABLE = False
+except ImportError:  # pragma: no cover
+    PYDANTIC_UNAVAILABLE = True
+
+try:
     import pandas as pd
 
     PANDAS_UNAVAILABLE = False
@@ -275,3 +282,37 @@ def test_mock_or_json_snapshot_redactions():
     assert result["sum"] == "[redacted]"
     assert result["x"] == 1
     assert result["y"] == 2
+
+
+@pytest.mark.skipif(PYDANTIC_UNAVAILABLE, reason="Pydantic is an optional dependency")
+@snapshot
+def test_snapshot_pydantic_model():
+    class Model(BaseModel):
+        id: int
+        name: str
+
+    return Model(id=1, name="foo")
+
+
+@pytest.mark.skipif(PYDANTIC_UNAVAILABLE, reason="Pydantic is an optional dependency")
+def test_assert_json_snapshot_pydantic_model():
+    class Model(BaseModel):
+        id: int
+        name: str
+
+    assert_json_snapshot(Model(id=1, name="foo"))
+
+
+@pytest.mark.skipif(PYDANTIC_UNAVAILABLE, reason="Pydantic is an optional dependency")
+def test_mock_json_snapshot_pydantic_model():
+    class Model(BaseModel):
+        id: int
+        name: str
+
+    def build_model() -> Model:
+        return Model(id=1, name="foo")
+
+    mocked = mock_json_snapshot(func=build_model)
+    result = mocked()
+    assert isinstance(result, dict)
+    assert result == {"id": 1, "name": "foo"}

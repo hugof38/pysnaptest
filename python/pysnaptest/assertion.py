@@ -11,6 +11,11 @@ from typing import Callable, Any, Dict, overload, Union, Optional, TYPE_CHECKING
 from functools import partial, wraps
 import asyncio
 
+try:  # pragma: no cover - optional dependency
+    from pydantic import BaseModel  # type: ignore
+except Exception:  # pragma: no cover
+    BaseModel = None  # type: ignore
+
 from ._pysnaptest import (
     assert_json_snapshot as _assert_json_snapshot,
     assert_csv_snapshot as _assert_csv_snapshot,
@@ -86,6 +91,13 @@ def assert_json_snapshot(
         redactions: Mapping of selectors to replacement values.
         allow_duplicates: Whether to allow duplicate snapshot names.
     """
+
+    if BaseModel is not None and isinstance(result, BaseModel):
+        # Support Pydantic models by converting them to dictionaries before
+        # delegating to the Rust layer.  ``model_dump`` was introduced in
+        # Pydantic v2 but ``dict`` is still available in v1, so we prefer
+        # ``model_dump`` when present for forward compatibility.
+        result = result.model_dump() if hasattr(result, "model_dump") else result.dict()
 
     test_info = extract_from_pytest_env(snapshot_path, snapshot_name, allow_duplicates)
     _assert_json_snapshot(test_info, result, redactions)
@@ -356,7 +368,11 @@ def insta_snapshot(
         allow_duplicates: Whether to allow duplicate snapshot names.
     """
 
-    if isinstance(result, dict) or isinstance(result, list):
+    if BaseModel is not None and isinstance(result, BaseModel):
+        # Pydantic models should be treated as JSON snapshots by first
+        # converting them to standard Python dictionaries.
+        assert_json_snapshot(result, snapshot_path, snapshot_name, redactions)
+    elif isinstance(result, dict) or isinstance(result, list):
         assert_json_snapshot(result, snapshot_path, snapshot_name, redactions)
     elif isinstance(result, bytes):
         assert_binary_snapshot(

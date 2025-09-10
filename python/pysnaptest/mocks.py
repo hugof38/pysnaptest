@@ -11,6 +11,11 @@ import importlib
 from unittest.mock import patch
 import functools
 
+try:  # pragma: no cover - optional dependency
+    from pydantic import BaseModel  # type: ignore
+except Exception:  # pragma: no cover
+    BaseModel = None  # type: ignore
+
 from ._pysnaptest import mock_json_snapshot as _mock_json_snapshot, SnapshotInfo
 from .assertion import extract_from_pytest_env
 
@@ -38,7 +43,26 @@ def mock_json_snapshot(
     """
 
     test_info = extract_from_pytest_env(snapshot_path, snapshot_name, allow_duplicates)
-    return _mock_json_snapshot(func, test_info, record, redactions)
+
+    if BaseModel is not None:
+        # Wrap the original function so that any returned Pydantic model is
+        # converted to a plain dictionary prior to JSON serialization.
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            result = func(*args, **kwargs)
+            if isinstance(result, BaseModel):
+                return (
+                    result.model_dump()
+                    if hasattr(result, "model_dump")
+                    else result.dict()
+                )
+            return result
+
+        func_to_use = wrapper
+    else:
+        func_to_use = func
+
+    return _mock_json_snapshot(func_to_use, test_info, record, redactions)
 
 
 def resolve_function(dotted_path: str):
