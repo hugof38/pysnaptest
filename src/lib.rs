@@ -86,18 +86,36 @@ pub fn assert_csv_snapshot(
     Ok(())
 }
 
+/// Store `result` on disk as an insta binary snapshot under
+/// `{snapshot_name}.{extension}`.
+///
+/// When `comparator` is provided it overrides insta's default byte-for-byte
+/// comparison, which is how [`assert_compressed_snapshot`] compares on the
+/// decompressed contents rather than the stored (compressed) bytes.
+fn assert_binary(
+    test_info: &SnapshotInfo,
+    extension: &str,
+    result: Vec<u8>,
+    comparator: Option<Box<dyn insta::comparator::Comparator>>,
+) -> PyResult<()> {
+    let snapshot_name = test_info.snapshot_name();
+    let mut settings: insta::Settings = test_info.try_into()?;
+    if let Some(comparator) = comparator {
+        settings.set_comparator(comparator);
+    }
+    settings.bind(|| {
+        insta::assert_binary_snapshot!(format!("{snapshot_name}.{extension}").as_str(), result);
+    });
+    Ok(())
+}
+
 #[pyfunction]
 pub fn assert_binary_snapshot(
     test_info: &SnapshotInfo,
     extension: &str,
     result: Vec<u8>,
 ) -> PyResult<()> {
-    let snapshot_name = test_info.snapshot_name();
-    let settings: insta::Settings = test_info.try_into()?;
-    settings.bind(|| {
-        insta::assert_binary_snapshot!(format!("{snapshot_name}.{extension}").as_str(), result);
-    });
-    Ok(())
+    assert_binary(test_info, extension, result, None)
 }
 
 #[pyfunction]
@@ -117,16 +135,11 @@ pub fn assert_compressed_snapshot(
         ))
     })?;
 
-    let snapshot_name = test_info.snapshot_name();
-    let extension = algorithm.extension();
-    let mut settings: insta::Settings = test_info.try_into()?;
     // Store the compressed bytes on disk but compare on the decompressed
     // contents (see `compression::CompressionComparator`).
-    settings.set_comparator(Box::new(compression::CompressionComparator::new(algorithm)));
-    settings.bind(|| {
-        insta::assert_binary_snapshot!(format!("{snapshot_name}.{extension}").as_str(), result);
-    });
-    Ok(())
+    let extension = algorithm.extension();
+    let comparator = Box::new(compression::CompressionComparator::new(algorithm));
+    assert_binary(test_info, extension, result, Some(comparator))
 }
 
 #[pyfunction]
