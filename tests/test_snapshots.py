@@ -3,6 +3,8 @@ from pathlib import Path
 import sys
 import platform
 import json
+import gzip
+import zlib
 
 from pysnaptest import (
     snapshot,
@@ -10,6 +12,7 @@ from pysnaptest import (
     assert_csv_snapshot,
     assert_dataframe_snapshot,
     assert_binary_snapshot,
+    assert_compressed_snapshot,
     sorted_redaction,
     rounded_redaction,
     assert_snapshot,
@@ -102,6 +105,23 @@ def test_assert_binary_snapshot():
 
 def test_assert_csv_snapshot_simple():
     assert_csv_snapshot("a,b\n1,2")
+
+
+def test_assert_csv_snapshot_fidelity():
+    # The csv crate would otherwise infer types and rewrite these values on
+    # round-trip (007 -> 7, 1.10 -> 1.1, 1e3 -> 1000.0). Every field must be
+    # preserved verbatim.
+    assert_csv_snapshot("id,price,sci\n007,1.10,1e3")
+
+
+def test_assert_compressed_snapshot_gzip():
+    assert_compressed_snapshot(gzip.compress(b"hello, compressed world\n"))
+
+
+def test_assert_compressed_snapshot_zlib():
+    assert_compressed_snapshot(
+        zlib.compress(b"hello, compressed world\n"), algorithm="zlib"
+    )
 
 
 @pytest.mark.skipif(PANDAS_UNAVAILABLE, reason="Pandas is an optional dependency")

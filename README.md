@@ -57,6 +57,43 @@ def test_use_http_request():
     return use_http_request()
 ```
 
+### Compressed snapshots
+
+`assert_compressed_snapshot` is for snapshotting data that you only have in a
+compressed form (gzip, zlib or raw deflate). The **compressed bytes** are stored
+on disk as a binary snapshot, but the comparison is performed on the
+**decompressed** contents. This has two benefits:
+
+- Two payloads that decode to the same data still match even when their
+  compressed representations differ — for example because gzip embeds a
+  timestamp in its header.
+- When the contents *do* differ, `pysnaptest` prints a readable unified diff of
+  the decompressed text instead of just linking to two opaque binary files.
+
+```python
+import gzip
+from pysnaptest import assert_compressed_snapshot
+
+def test_compressed():
+    payload = gzip.compress(b"hello, compressed world\n")
+    assert_compressed_snapshot(payload)
+```
+
+The `algorithm` argument selects how the bytes are decompressed for comparison.
+Supported values are `"gzip"` (the default), `"zlib"` and `"deflate"`:
+
+```python
+import zlib
+from pysnaptest import assert_compressed_snapshot
+
+def test_compressed_zlib():
+    payload = zlib.compress(b"hello, compressed world\n")
+    assert_compressed_snapshot(payload, algorithm="zlib")
+```
+
+`assert_compressed_snapshot` also accepts the usual `snapshot_path`,
+`snapshot_name` and `allow_duplicates` overrides.
+
 ## Updating Snapshots
 
 If the output changes intentionally, you can review and update snapshots using

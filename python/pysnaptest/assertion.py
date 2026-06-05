@@ -16,6 +16,7 @@ from ._pysnaptest import (
     assert_csv_snapshot as _assert_csv_snapshot,
     assert_snapshot as _assert_snapshot,
     assert_binary_snapshot as _assert_binary_snapshot,
+    assert_compressed_snapshot as _assert_compressed_snapshot,
     SnapshotInfo,
 )
 
@@ -315,6 +316,33 @@ def assert_binary_snapshot(
 
     test_info = extract_from_pytest_env(snapshot_path, snapshot_name, allow_duplicates)
     _assert_binary_snapshot(test_info, extension, result)
+
+
+def assert_compressed_snapshot(
+    result: bytes,
+    snapshot_path: str | None = None,
+    snapshot_name: str | None = None,
+    algorithm: str = "gzip",
+    allow_duplicates: bool = False,
+):
+    """Assert that compressed data matches the stored snapshot.
+
+    The compressed bytes are stored on disk as a binary snapshot, but the
+    comparison is performed on the *decompressed* contents. This means that two
+    payloads that decode to the same data still match even if their compressed
+    representations differ (for example because gzip embeds a timestamp).
+
+    Args:
+        result: Already-compressed bytes to snapshot.
+        snapshot_path: Optional path override for storing the snapshot.
+        snapshot_name: Optional name override for the snapshot file.
+        algorithm: Compression algorithm used to produce ``result``. One of
+            ``"gzip"`` (default), ``"zlib"`` or ``"deflate"``.
+        allow_duplicates: Whether to allow duplicate snapshot names.
+    """
+
+    test_info = extract_from_pytest_env(snapshot_path, snapshot_name, allow_duplicates)
+    _assert_compressed_snapshot(test_info, result, algorithm)
 
 
 def assert_snapshot(

@@ -7,6 +7,7 @@ use pyo3::{
 };
 
 mod common;
+mod compression;
 mod errors;
 mod mocks;
 
@@ -17,6 +18,7 @@ pub use mocks::*;
 use std::{collections::HashMap, path::PathBuf};
 
 use csv::ReaderBuilder;
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
 #[pyfunction]
@@ -47,18 +49,29 @@ pub fn assert_csv_snapshot(
     result: &str,
     redactions: Option<HashMap<String, RedactionType>>,
 ) -> PyResult<()> {
+    // Keep every field as a string so the csv crate cannot infer types and
+    // silently rewrite values on round-trip (e.g. 007 -> 7, 1.10 -> 1.1,
+    // 1e3 -> 1000.0). Column redactions still apply since the headers are
+    // preserved as the first row.
     let mut rdr = ReaderBuilder::new().from_reader(result.as_bytes());
-    let columns: Vec<Vec<serde_json::Value>> = vec![rdr
+    let header_row: Vec<serde_json::Value> = rdr
         .headers()
-        .expect("Expects csv with headers")
-        .into_iter()
-        .map(|h| h.into())
-        .collect()];
-    let records = rdr
-        .into_deserialize()
-        .collect::<Result<Vec<Vec<serde_json::Value>>, _>>()
-        .expect("Failed to parse csv records");
-    let res: Vec<Vec<serde_json::Value>> = columns.into_iter().chain(records).collect();
+        .map_err(|e| PyValueError::new_err(format!("Failed to parse csv headers: {e}")))?
+        .iter()
+        .map(|h| serde_json::Value::String(h.to_string()))
+        .collect();
+
+    let mut res: Vec<Vec<serde_json::Value>> = vec![header_row];
+    for record in rdr.records() {
+        let record = record
+            .map_err(|e| PyValueError::new_err(format!("Failed to parse csv record: {e}")))?;
+        res.push(
+            record
+                .iter()
+                .map(|field| serde_json::Value::String(field.to_string()))
+                .collect(),
+        );
+    }
 
     let snapshot_name = test_info.snapshot_name();
     let mut settings: insta::Settings = test_info.try_into()?;
@@ -85,6 +98,16 @@ pub fn assert_binary_snapshot(
         insta::assert_binary_snapshot!(format!("{snapshot_name}.{extension}").as_str(), result);
     });
     Ok(())
+}
+
+#[pyfunction]
+#[pyo3(signature = (test_info, result, algorithm="gzip"))]
+pub fn assert_compressed_snapshot(
+    test_info: &SnapshotInfo,
+    result: Vec<u8>,
+    algorithm: &str,
+) -> PyResult<()> {
+    compression::assert_compressed_snapshot(test_info, result, algorithm)
 }
 
 #[pyfunction]
@@ -182,6 +205,7 @@ fn pysnaptest(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(assert_binary_snapshot, m)?)?;
     m.add_function(wrap_pyfunction!(assert_json_snapshot, m)?)?;
     m.add_function(wrap_pyfunction!(assert_csv_snapshot, m)?)?;
+    m.add_function(wrap_pyfunction!(assert_compressed_snapshot, m)?)?;
     m.add_function(wrap_pyfunction!(mock_json_snapshot, m)?)?;
     m.add_class::<PySnapshot>()?;
     Ok(())

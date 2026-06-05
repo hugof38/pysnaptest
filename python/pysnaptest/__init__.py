@@ -12,6 +12,7 @@ from .assertion import (
     assert_snapshot,
     assert_dataframe_snapshot,
     assert_binary_snapshot,
+    assert_compressed_snapshot,
     sorted_redaction,
     rounded_redaction,
     extract_from_pytest_env,

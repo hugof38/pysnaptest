@@ -1,0 +1,6 @@
+---
+source: src/lib.rs
+description: "Test File Path: tests/test_snapshots.py"
+---
+id,price,sci
+007,1.10,1e3

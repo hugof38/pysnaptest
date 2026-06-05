@@ -1,0 +1,6 @@
+---
+source: src/compression.rs
+description: "Test File Path: tests/test_snapshots.py"
+extension: gz
+snapshot_kind: binary
+---
