@@ -11,8 +11,8 @@
 //! prints a readable unified diff of the decompressed strings, since insta only
 //! shows binary file links for binary snapshots otherwise.
 
+use std::borrow::Cow;
 use std::io::Read;
-use std::ops::Deref;
 
 use flate2::read::{DeflateDecoder, GzDecoder, ZlibDecoder};
 use insta::comparator::Comparator;
@@ -20,7 +20,7 @@ use insta::internals::SnapshotContents;
 use insta::Snapshot;
 use pyo3::exceptions::PyValueError;
 use pyo3::PyResult;
-use similar::TextDiff;
+use similar::{Algorithm, TextDiff};
 
 /// Compression algorithms supported by [`assert_compressed_snapshot`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -54,36 +54,35 @@ impl CompressionAlgorithm {
 
     /// Decompress `data` according to this algorithm.
     pub fn decompress(&self, data: &[u8]) -> std::io::Result<Vec<u8>> {
+        let mut reader: Box<dyn Read> = match self {
+            Self::Gzip => Box::new(GzDecoder::new(data)),
+            Self::Zlib => Box::new(ZlibDecoder::new(data)),
+            Self::Deflate => Box::new(DeflateDecoder::new(data)),
+        };
         let mut out = Vec::new();
-        match self {
-            Self::Gzip => {
-                GzDecoder::new(data).read_to_end(&mut out)?;
-            }
-            Self::Zlib => {
-                ZlibDecoder::new(data).read_to_end(&mut out)?;
-            }
-            Self::Deflate => {
-                DeflateDecoder::new(data).read_to_end(&mut out)?;
-            }
-        }
+        reader.read_to_end(&mut out)?;
         Ok(out)
     }
 }
 
-/// Extract the raw bytes backing a snapshot, regardless of whether it is stored
-/// as a binary or text snapshot.
-fn snapshot_bytes(snapshot: &Snapshot) -> Vec<u8> {
+/// Borrow the raw bytes backing a snapshot, regardless of whether it is stored
+/// as a binary or text snapshot. The common (binary) case borrows; only text
+/// snapshots need an owned copy.
+fn snapshot_bytes(snapshot: &Snapshot) -> Cow<'_, [u8]> {
     match snapshot.contents() {
-        SnapshotContents::Binary(items) => items.deref().clone(),
-        SnapshotContents::Text(text) => text.to_string().into_bytes(),
+        SnapshotContents::Binary(items) => Cow::Borrowed(items.as_slice()),
+        SnapshotContents::Text(text) => Cow::Owned(text.to_string().into_bytes()),
     }
 }
 
-/// Print a unified diff of two decompressed payloads to stderr.
+/// Print a unified diff of two decompressed payloads to stderr, using the same
+/// diff method insta uses for text snapshots (the Patience line diff).
 fn print_decompressed_diff(reference: &[u8], test: &[u8]) {
     let reference = String::from_utf8_lossy(reference);
     let test = String::from_utf8_lossy(test);
-    let diff = TextDiff::from_lines(reference.as_ref(), test.as_ref());
+    let diff = TextDiff::configure()
+        .algorithm(Algorithm::Patience)
+        .diff_lines(reference.as_ref(), test.as_ref());
     eprintln!("\nCompressed snapshot mismatch (showing decompressed unified diff):");
     eprint!(
         "{}",
@@ -112,8 +111,8 @@ impl Comparator for CompressionComparator {
         let test_bytes = snapshot_bytes(test);
 
         match (
-            self.algorithm.decompress(&reference_bytes),
-            self.algorithm.decompress(&test_bytes),
+            self.algorithm.decompress(reference_bytes.as_ref()),
+            self.algorithm.decompress(test_bytes.as_ref()),
         ) {
             (Ok(reference_decompressed), Ok(test_decompressed)) => {
                 if reference_decompressed == test_decompressed {
