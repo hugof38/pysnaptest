@@ -1,6 +1,6 @@
 ---
-source: src/compression.rs
+source: src/lib.rs
 description: "Test File Path: tests/test_snapshots.py"
-extension: zz
+extension: gz
 snapshot_kind: binary
 ---

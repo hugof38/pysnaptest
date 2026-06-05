@@ -22,8 +22,6 @@ use pyo3::exceptions::PyValueError;
 use pyo3::PyResult;
 use similar::TextDiff;
 
-use crate::SnapshotInfo;
-
 /// Compression algorithms supported by [`assert_compressed_snapshot`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CompressionAlgorithm {
@@ -134,35 +132,4 @@ impl Comparator for CompressionComparator {
     fn dyn_clone(&self) -> Box<dyn Comparator> {
         Box::new(self.clone())
     }
-}
-
-/// Assert that `result` (already-compressed bytes) matches the stored snapshot.
-///
-/// The compressed bytes are stored on disk as a binary snapshot, but comparison
-/// is performed on the decompressed contents via [`CompressionComparator`].
-pub fn assert_compressed_snapshot(
-    test_info: &SnapshotInfo,
-    result: Vec<u8>,
-    algorithm: &str,
-) -> PyResult<()> {
-    let algorithm = CompressionAlgorithm::parse(algorithm)?;
-
-    // Validate the input actually decompresses before storing it, so callers get
-    // a clear error instead of an unreadable binary snapshot.
-    algorithm.decompress(&result).map_err(|e| {
-        PyValueError::new_err(format!(
-            "Failed to decompress the provided bytes as {:?}: {e}",
-            algorithm
-        ))
-    })?;
-
-    let snapshot_name = test_info.snapshot_name();
-    let extension = algorithm.extension();
-    let mut settings: insta::Settings = test_info.try_into()?;
-    settings.set_comparator(Box::new(CompressionComparator::new(algorithm)));
-
-    settings.bind(|| {
-        insta::assert_binary_snapshot!(format!("{snapshot_name}.{extension}").as_str(), result);
-    });
-    Ok(())
 }
