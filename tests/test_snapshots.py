@@ -221,7 +221,7 @@ def test_snapshot_contents_json():
 
 
 def test_save_snapshot_path_in_advance():
-    snapshot_that_will_be_created = extract_from_pytest_env().next_snapshot_path()
+    snapshot_that_will_be_created = extract_from_pytest_env().next_snapshot_path(None)
     expected = "expected_result_1"
     assert_snapshot(expected)
     snapshot = PySnapshot.from_file(snapshot_that_will_be_created)
@@ -231,7 +231,7 @@ def test_save_snapshot_path_in_advance():
 def test_snapshot_then_load():
     expected = "expected_result_1"
     assert_snapshot(expected)
-    snapshot = PySnapshot.from_file(extract_from_pytest_env().last_snapshot_path())
+    snapshot = PySnapshot.from_file(extract_from_pytest_env().last_snapshot_path(None))
     assert snapshot.contents().decode() == expected
 
 
