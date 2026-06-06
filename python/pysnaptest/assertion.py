@@ -341,8 +341,13 @@ def assert_compressed_snapshot(
         allow_duplicates: Whether to allow duplicate snapshot names.
     """
 
-    test_info = extract_from_pytest_env(snapshot_path, snapshot_name, allow_duplicates)
-    _assert_compressed_snapshot(test_info, result, algorithm)
+    _assert_compressed_snapshot(
+        result,
+        algorithm,
+        snapshot_path=snapshot_path,
+        snapshot_name=snapshot_name,
+        allow_duplicates=allow_duplicates,
+    )
 
 
 def assert_snapshot(

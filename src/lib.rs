@@ -119,11 +119,13 @@ pub fn assert_binary_snapshot(
 }
 
 #[pyfunction]
-#[pyo3(signature = (test_info, result, algorithm="gzip"))]
+#[pyo3(signature = (result, algorithm="gzip", snapshot_path=None, snapshot_name=None, allow_duplicates=false))]
 pub fn assert_compressed_snapshot(
-    test_info: &SnapshotInfo,
     result: Vec<u8>,
     algorithm: &str,
+    snapshot_path: Option<PathBuf>,
+    snapshot_name: Option<String>,
+    allow_duplicates: bool,
 ) -> PyResult<()> {
     let algorithm = compression::CompressionAlgorithm::parse(algorithm)?;
 
@@ -135,11 +137,15 @@ pub fn assert_compressed_snapshot(
         ))
     })?;
 
+    // Resolve the snapshot location from the active pytest test so callers don't
+    // have to build a SnapshotInfo by hand.
+    let test_info = SnapshotInfo::from_pytest(snapshot_path, snapshot_name, allow_duplicates)?;
+
     // Store the compressed bytes on disk but compare on the decompressed
     // contents (see `compression::CompressionComparator`).
     let extension = algorithm.extension();
     let comparator = Box::new(compression::CompressionComparator::new(algorithm));
-    assert_binary(test_info, extension, result, Some(comparator))
+    assert_binary(&test_info, extension, result, Some(comparator))
 }
 
 #[pyfunction]
