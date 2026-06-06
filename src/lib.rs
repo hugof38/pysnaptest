@@ -152,24 +152,12 @@ impl SnapshotInfo {
         self.snapshot_name_with_idx(test_idx)
     }
 
-    pub fn last_snapshot_path(&self, module_path: Option<String>) -> PyResult<PathBuf> {
-        let module_path = module_path
-            .unwrap_or(module_path!().to_string())
-            .replace("::", "__");
-        Ok(self.snapshot_folder.join(format!(
-            "{module_path}__{}@pysnap.snap",
-            self.last_snapshot_name()
-        )))
+    pub fn last_snapshot_path(&self) -> PyResult<PathBuf> {
+        Ok(self.snapshot_path_for(module_path!(), &self.last_snapshot_name()))
     }
 
-    pub fn next_snapshot_path(&self, module_path: Option<String>) -> PyResult<PathBuf> {
-        let module_path = module_path
-            .unwrap_or(module_path!().to_string())
-            .replace("::", "__");
-        Ok(self.snapshot_folder.join(format!(
-            "{module_path}__{}@pysnap.snap",
-            self.next_snapshot_name()
-        )))
+    pub fn next_snapshot_path(&self) -> PyResult<PathBuf> {
+        Ok(self.snapshot_path_for(module_path!(), &self.next_snapshot_name()))
     }
 }
 

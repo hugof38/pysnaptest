@@ -153,6 +153,15 @@ impl SnapshotInfo {
 
         self.snapshot_name_with_idx(test_idx)
     }
+
+    /// Build the on-disk path insta would use for a snapshot, mirroring its
+    /// `{module_path}__{name}@{suffix}.snap` naming scheme. insta keeps this
+    /// construction private, so we reproduce it here in a single place.
+    pub(crate) fn snapshot_path_for(&self, module_path: &str, snapshot_name: &str) -> PathBuf {
+        let module_path = module_path.replace("::", "__");
+        let file_name = format!("{module_path}__{snapshot_name}@{PYSNAPSHOT_SUFFIX}.snap");
+        self.snapshot_folder.join(file_name)
+    }
 }
 
 impl TryInto<insta::Settings> for &SnapshotInfo {

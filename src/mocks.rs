@@ -20,7 +20,7 @@ macro_rules! snapshot_fn_auto {
                 snapshot_name: format!("{}_{}", info.snapshot_name, name),
                 ..info.clone()
             };
-            let snapshot_path = finfo.next_snapshot_path(Some(module_path.to_string()))?;
+            let snapshot_path = finfo.snapshot_path_for(module_path, &finfo.next_snapshot_name());
             let snapshot_name = finfo.snapshot_name();
             let mut settings: insta::Settings = (&finfo).try_into()?;
 
