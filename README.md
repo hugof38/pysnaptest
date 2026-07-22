@@ -4,12 +4,28 @@
 
 Snapshot testing helps ensure that your code produces consistent outputs as you make changes. By capturing the output of your code and comparing it to a stored "snapshot," you can detect unintended changes with ease.
 
-## Features
+## Why pysnaptest?
+
+Most of what sets `pysnaptest` apart from other Python snapshot libraries comes
+from wrapping the mature Rust [Insta](https://insta.rs/) engine and adding a few
+capabilities that peers don't offer out of the box:
+
+- **Real insta `.snap` format, compatible with `cargo-insta review`.** You get
+  insta's battle-tested snapshot format and its interactive diff/review tooling
+  for free — no other Python tool reads and writes insta snapshots.
+- **First-class DataFrame snapshots.** Snapshot pandas or polars `DataFrame`
+  objects directly, serialized as CSV, JSON, parquet, or insta's binary format.
+- **Mock-and-snapshot external calls.** `patch_json_snapshot` records the JSON
+  result of a patched function as a snapshot, so tests that hit external APIs
+  become deterministic without hand-written fixtures.
+- **Insta redaction selectors** for scrubbing nondeterministic fields (ids,
+  timestamps) before comparison.
+
+It also keeps the basics other tools give you:
 
 - **Fast and Lightweight**: Leverages Rust's high performance through the Insta library.
 - **Simple Integration**: Easy-to-use Python API for snapshot testing.
 - **Human-Readable Snapshots**: Snapshots are stored in a clean, readable format.
-- **Flexible Matchers**: Supports testing strings, JSON, and other data structures.
 - **Automatic Snapshot Updates**: Conveniently update snapshots when intended changes are made.
 - **CI-Friendly**: Great for continuous integration workflows.
 
@@ -56,6 +72,23 @@ from my_project.main import use_http_request
 def test_use_http_request():
     return use_http_request()
 ```
+
+### Which API do I use?
+
+All three entry points write the same insta snapshots — pick based on how your
+test is shaped:
+
+- **`@snapshot`** — when the thing you want to snapshot is a test function's
+  return value. It auto-detects the type (dict/list → JSON, `bytes` → binary,
+  pandas/polars → DataFrame, everything else → text) and works on `async`
+  tests too.
+- **`assert_json_snapshot` / `assert_snapshot` / `assert_csv_snapshot` /
+  `assert_binary_snapshot` / `assert_dataframe_snapshot`** — when you want to
+  assert a value mid-test, or need explicit control over the format, path, name,
+  or redactions.
+- **`patch_json_snapshot` / `mock_json_snapshot`** — when a function calls out to
+  an external dependency (HTTP, DB) and you want to snapshot that call's JSON
+  result instead of mocking it by hand.
 
 ## Updating Snapshots
 
