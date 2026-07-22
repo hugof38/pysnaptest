@@ -57,7 +57,7 @@ pub enum SnapError {
     Py(PyErr),
     PytestInfo(PytestInfoError),
     Pythonize(PythonizeError),
-    Other(Box<dyn std::error::Error>),
+    Insta(String),
 }
 
 impl Display for SnapError {
@@ -69,12 +69,22 @@ impl Display for SnapError {
             SnapError::Py(e) => write!(f, "{e}"),
             SnapError::PytestInfo(e) => write!(f, "{e}"),
             SnapError::Pythonize(e) => write!(f, "{e}"),
-            SnapError::Other(e) => write!(f, "{e}"),
+            SnapError::Insta(e) => write!(f, "{e}"),
         }
     }
 }
 
 impl std::error::Error for SnapError {}
+
+impl SnapError {
+    /// Builds an [`SnapError::Insta`] from any displayable error.
+    ///
+    /// insta's file APIs return a boxed `dyn Error`; this captures the message
+    /// as a concrete `String` so `SnapError` never stores a type-erased error.
+    pub fn insta(err: impl Display) -> Self {
+        SnapError::Insta(err.to_string())
+    }
+}
 
 impl From<String> for SnapError {
     fn from(value: String) -> Self {
@@ -97,12 +107,6 @@ impl From<std::io::Error> for SnapError {
 impl From<PythonizeError> for SnapError {
     fn from(value: PythonizeError) -> Self {
         SnapError::Pythonize(value)
-    }
-}
-
-impl From<Box<dyn std::error::Error>> for SnapError {
-    fn from(err: Box<dyn std::error::Error>) -> Self {
-        SnapError::Other(err)
     }
 }
 
