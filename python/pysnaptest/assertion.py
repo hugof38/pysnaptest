@@ -8,7 +8,7 @@ structures.
 from __future__ import annotations
 
 from typing import Callable, Any, Dict, overload, Union, Optional, TYPE_CHECKING
-from functools import partial, wraps
+from functools import wraps
 import asyncio
 
 from ._pysnaptest import (
@@ -356,14 +356,13 @@ def insta_snapshot(
         allow_duplicates: Whether to allow duplicate snapshot names.
     """
 
-    if isinstance(result, dict) or isinstance(result, list):
+    if isinstance(result, (dict, list)):
         assert_json_snapshot(result, snapshot_path, snapshot_name, redactions)
     elif isinstance(result, bytes):
         assert_binary_snapshot(
             result,
             snapshot_path,
             snapshot_name,
-            extension=dataframe_snapshot_format,
             allow_duplicates=allow_duplicates,
         )
     elif try_is_pandas_df(result) or try_is_polars_df(result):
@@ -425,10 +424,29 @@ def snapshot(  # noqa: F811
         Callable: The wrapped function.
     """
 
-    if asyncio.iscoroutinefunction(func):
+    def _wrap(target: Callable) -> Callable:
+        if not callable(target):
+            raise TypeError("Not a callable. Did you use a non-keyword argument?")
 
-        async def asserted_func(func: Callable, *args: Any, **kwargs: Any):
-            result = await func(*args, **kwargs)
+        if asyncio.iscoroutinefunction(target):
+
+            @wraps(target)
+            async def asserted_func(*args: Any, **kwargs: Any):
+                result = await target(*args, **kwargs)
+                insta_snapshot(
+                    result,
+                    snapshot_path=snapshot_path,
+                    snapshot_name=snapshot_name,
+                    redactions=redactions,
+                    dataframe_snapshot_format=dataframe_snapshot_format,
+                    allow_duplicates=allow_duplicates,
+                )
+
+            return asserted_func
+
+        @wraps(target)
+        def asserted_func(*args: Any, **kwargs: Any):
+            result = target(*args, **kwargs)
             insta_snapshot(
                 result,
                 snapshot_path=snapshot_path,
@@ -438,25 +456,9 @@ def snapshot(  # noqa: F811
                 allow_duplicates=allow_duplicates,
             )
 
-    else:
-
-        def asserted_func(func: Callable, *args: Any, **kwargs: Any):
-            result = func(*args, **kwargs)
-            insta_snapshot(
-                result,
-                snapshot_path=snapshot_path,
-                snapshot_name=snapshot_name,
-                redactions=redactions,
-                dataframe_snapshot_format=dataframe_snapshot_format,
-                allow_duplicates=allow_duplicates,
-            )
+        return asserted_func
 
     if func is not None:
-        if not callable(func):
-            raise TypeError("Not a callable. Did you use a non-keyword argument?")
-        return wraps(func)(partial(asserted_func, func))
+        return _wrap(func)
 
-    def decorator(func: Callable) -> Callable:
-        return wraps(func)(partial(asserted_func, func))
-
-    return decorator
+    return _wrap
