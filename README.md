@@ -99,7 +99,7 @@ match exactly what you see from a failing assertion or `cargo insta review`.
 You can also drive this from Python:
 
 ```python
-from pysnaptest import find_pending_snapshots, accept_pending_snapshot
+from pysnaptest.review import find_pending_snapshots, accept_pending_snapshot
 
 for pending in find_pending_snapshots():
     accept_pending_snapshot(pending)

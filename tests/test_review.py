@@ -7,7 +7,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from pysnaptest import (
+from pysnaptest.review import (
     accept_pending_snapshot,
     find_pending_snapshots,
     print_pending_diff,
