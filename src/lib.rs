@@ -9,6 +9,7 @@ use pyo3::{
 mod common;
 mod errors;
 mod mocks;
+mod panic;
 
 pub use common::*;
 pub use errors::*;
@@ -17,6 +18,7 @@ pub use mocks::*;
 use std::{collections::HashMap, path::PathBuf};
 
 use csv::ReaderBuilder;
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
 #[pyfunction]
@@ -34,10 +36,12 @@ pub fn assert_json_snapshot(
         settings.add_redaction(selector.as_str(), redaction);
     }
 
-    settings.bind(|| {
-        insta::assert_json_snapshot!(snapshot_name, res);
-    });
-    Ok(())
+    let snapshot_label = snapshot_name.clone();
+    panic::run_snapshot_assertion(&snapshot_label, || {
+        settings.bind(|| {
+            insta::assert_json_snapshot!(snapshot_name, res);
+        });
+    })
 }
 
 #[pyfunction]
@@ -50,14 +54,14 @@ pub fn assert_csv_snapshot(
     let mut rdr = ReaderBuilder::new().from_reader(result.as_bytes());
     let columns: Vec<Vec<serde_json::Value>> = vec![rdr
         .headers()
-        .expect("Expects csv with headers")
+        .map_err(|e| PyValueError::new_err(format!("Failed to read CSV headers: {e}")))?
         .into_iter()
         .map(|h| h.into())
         .collect()];
     let records = rdr
         .into_deserialize()
         .collect::<Result<Vec<Vec<serde_json::Value>>, _>>()
-        .expect("Failed to parse csv records");
+        .map_err(|e| PyValueError::new_err(format!("Failed to parse CSV records: {e}")))?;
     let res: Vec<Vec<serde_json::Value>> = columns.into_iter().chain(records).collect();
 
     let snapshot_name = test_info.snapshot_name();
@@ -67,10 +71,12 @@ pub fn assert_csv_snapshot(
         settings.add_redaction(selector.as_str(), redaction);
     }
 
-    settings.bind(|| {
-        insta::assert_csv_snapshot!(snapshot_name, res);
-    });
-    Ok(())
+    let snapshot_label = snapshot_name.clone();
+    panic::run_snapshot_assertion(&snapshot_label, || {
+        settings.bind(|| {
+            insta::assert_csv_snapshot!(snapshot_name, res);
+        });
+    })
 }
 
 #[pyfunction]
@@ -81,20 +87,24 @@ pub fn assert_binary_snapshot(
 ) -> PyResult<()> {
     let snapshot_name = test_info.snapshot_name();
     let settings: insta::Settings = test_info.try_into()?;
-    settings.bind(|| {
-        insta::assert_binary_snapshot!(format!("{snapshot_name}.{extension}").as_str(), result);
-    });
-    Ok(())
+    let snapshot_label = snapshot_name.clone();
+    panic::run_snapshot_assertion(&snapshot_label, || {
+        settings.bind(|| {
+            insta::assert_binary_snapshot!(format!("{snapshot_name}.{extension}").as_str(), result);
+        });
+    })
 }
 
 #[pyfunction]
 pub fn assert_snapshot(test_info: &SnapshotInfo, result: &Bound<'_, PyAny>) -> PyResult<()> {
     let snapshot_name = test_info.snapshot_name();
     let settings: insta::Settings = test_info.try_into()?;
-    settings.bind(|| {
-        insta::assert_snapshot!(snapshot_name, result);
-    });
-    Ok(())
+    let snapshot_label = snapshot_name.clone();
+    panic::run_snapshot_assertion(&snapshot_label, || {
+        settings.bind(|| {
+            insta::assert_snapshot!(snapshot_name, result);
+        });
+    })
 }
 
 #[pymethods]

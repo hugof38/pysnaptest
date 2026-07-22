@@ -42,7 +42,7 @@ macro_rules! snapshot_fn_auto {
                 Ok(result)
             } else {
                 match Snapshot::from_file(&snapshot_path)
-                    .map_err(SnapError::from)?
+                    .map_err(SnapError::insta)?
                     .contents()
                 {
                     SnapshotContents::Text(content) => {
