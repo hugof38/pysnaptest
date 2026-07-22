@@ -17,8 +17,12 @@ on:
   workflow_dispatch:
 
 env:
-  INTERPRETERS: python3.9 python3.10 python3.11 python3.12 python3.13 pypy3.9 pypy3.10
-  WINDOWS_INTERPRETERS: python3.9 python3.10 python3.11 python3.12 python3.13
+  INTERPRETERS: python3.9 python3.10 python3.11 python3.12 python3.13 python3.14 pypy3.9 pypy3.10
+  WINDOWS_INTERPRETERS: python3.9 python3.10 python3.11 python3.12 python3.13 python3.14
+  # Force cargo's crates.io downloads onto HTTP/1.1. The default HTTP/2
+  # multiplexing intermittently fails on GitHub's macOS runners with
+  # "curl [16] Error in the HTTP2 framing layer" while fetching the index.
+  CARGO_HTTP_MULTIPLEXING: "false"
 
 permissions:
   contents: read
@@ -124,7 +128,10 @@ jobs:
     strategy:
       matrix:
         platform:
-          - runner: macos-13
+          # macos-13 (the last Intel image) is being retired, so jobs pinned to
+          # it hang forever waiting for a runner. Cross-compile the x86_64 wheel
+          # on an Apple Silicon runner instead; maturin-action adds the target.
+          - runner: macos-14
             target: x86_64
           - runner: macos-14
             target: aarch64
