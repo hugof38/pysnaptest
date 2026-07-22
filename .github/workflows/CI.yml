@@ -17,8 +17,8 @@ on:
   workflow_dispatch:
 
 env:
-  INTERPRETERS: python3.9 python3.10 python3.11 python3.12 python3.13 python3.13t pypy3.9 pypy3.10
-  WINDOWS_INTERPRETERS: python3.9 python3.10 python3.11 python3.12 python3.13 python3.13
+  INTERPRETERS: python3.9 python3.10 python3.11 python3.12 python3.13 pypy3.9 pypy3.10
+  WINDOWS_INTERPRETERS: python3.9 python3.10 python3.11 python3.12 python3.13
 
 permissions:
   contents: read

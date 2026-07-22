@@ -224,7 +224,12 @@ impl PySnapshot {
             SnapshotContents::Text(text_snapshot_contents) => {
                 text_snapshot_contents.to_string().as_bytes().to_vec()
             }
-            SnapshotContents::Binary(items) => items.deref().to_owned(),
+            SnapshotContents::Binary(Some(items)) => items.deref().to_owned(),
+            SnapshotContents::Binary(None) => {
+                return Err(pyo3::exceptions::PyValueError::new_err(
+                    "Binary snapshot metadata exists but its data file is missing",
+                ))
+            }
         })
     }
 }
