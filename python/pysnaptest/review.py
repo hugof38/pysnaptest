@@ -67,9 +67,7 @@ def reject_pending_snapshot(pending_path: str | Path) -> None:
     _reject_pending_snapshot(str(pending_path))
 
 
-def print_pending_diff(
-    pending_path: str | Path, root: Optional[str] = None
-) -> None:
+def print_pending_diff(pending_path: str | Path, root: Optional[str] = None) -> None:
     """Print insta's own diff for a pending snapshot against its committed target.
 
     Args:
@@ -146,4 +144,3 @@ def review(root: Optional[str] = None) -> int:
             if choice in {"q", "quit"}:
                 return accepted
     return accepted
-

@@ -156,7 +156,9 @@ pub fn accept_pending_snapshot(pending_path: PathBuf) -> PyResult<PathBuf> {
         ))
     })?;
     snapshot.save(&target).map_err(|e| {
-        PyValueError::new_err(format!("Unable to save snapshot to {target:?}, details: {e}"))
+        PyValueError::new_err(format!(
+            "Unable to save snapshot to {target:?}, details: {e}"
+        ))
     })?;
     remove_pending_files(&pending_path, &snapshot)?;
     Ok(target)
@@ -193,7 +195,9 @@ pub fn print_pending_diff(pending_path: PathBuf, workspace_root: Option<PathBuf>
     let target = pending_path.with_extension("");
     let old_snapshot = if target.exists() {
         Some(Snapshot::from_file(&target).map_err(|e| {
-            PyValueError::new_err(format!("Unable to load snapshot from {target:?}, details: {e}"))
+            PyValueError::new_err(format!(
+                "Unable to load snapshot from {target:?}, details: {e}"
+            ))
         })?)
     } else {
         None

@@ -7,7 +7,7 @@ snapshot-management flags to ``pytest``:
   ``INSTA_UPDATE=always`` before any assertion runs).
 * ``--snapshot-new`` — record changed/new snapshots as pending ``*.snap.new``
   files instead (sets ``INSTA_UPDATE=new``); accept them with
-  ``python -m pysnaptest accept``.
+  ``pysnaptest accept``.
 
 insta does the actual work (diffing, writing, format); this plugin only selects
 the update mode. The environment variable is set in :func:`pytest_configure`,
@@ -56,6 +56,3 @@ def pytest_configure(config: "pytest.Config") -> None:
         os.environ["INSTA_UPDATE"] = "always"
     elif config.getoption("--snapshot-new"):
         os.environ["INSTA_UPDATE"] = "new"
-
-
-

@@ -82,15 +82,15 @@ at a time, showing insta's own diff and prompting to accept, reject, or skip:
 
 ```bash
 pytest --snapshot-new          # record changed snapshots as pending files
-python -m pysnaptest review    # interactively review each pending snapshot
+pysnaptest review              # interactively review each pending snapshot
 ```
 
 You can also act on all pending snapshots at once:
 
 ```bash
-python -m pysnaptest pending   # list pending snapshots with their diffs
-python -m pysnaptest accept    # accept every pending snapshot
-python -m pysnaptest reject    # discard every pending snapshot
+pysnaptest pending             # list pending snapshots with their diffs
+pysnaptest accept              # accept every pending snapshot
+pysnaptest reject              # discard every pending snapshot
 ```
 
 The diffs shown by `review` and `pending` are rendered by insta itself, so they

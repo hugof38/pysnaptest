@@ -1,6 +1,6 @@
 """Command-line entry point for reviewing pending snapshots.
 
-Run ``python -m pysnaptest --help`` for usage. Mirrors the common
+Run ``pysnaptest --help`` for usage. Mirrors the common
 ``cargo insta`` subcommands (``review``, ``accept``, ``reject``,
 ``pending-snapshots``) but works without any Rust tooling.
 """
@@ -72,4 +72,3 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
