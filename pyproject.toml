@@ -17,6 +17,12 @@ pandas = ["pandas>=0.12.0"]
 polars = ["polars>=0.18"]
 pyarrow = ["pyarrow>=17.0.0"]
 
+[project.scripts]
+pysnaptest = "pysnaptest.__main__:main"
+
+[project.entry-points.pytest11]
+pysnaptest = "pysnaptest.pytest_plugin"
+
 [tool.maturin]
 bindings = 'pyo3'
 features = ["pyo3/extension-module"]

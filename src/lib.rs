@@ -15,9 +15,14 @@ pub use common::*;
 pub use errors::*;
 pub use mocks::*;
 
-use std::{collections::HashMap, path::PathBuf};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 
 use csv::ReaderBuilder;
+use insta::output::SnapshotPrinter;
+use insta::Snapshot;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
@@ -107,6 +112,109 @@ pub fn assert_snapshot(test_info: &SnapshotInfo, result: &Bound<'_, PyAny>) -> P
     })
 }
 
+/// Removes a pending `.snap.new` file and, for binary snapshots, its sidecar data file.
+fn remove_pending_files(pending_path: &Path, snapshot: &Snapshot) -> PyResult<()> {
+    if let Some(binary_sidecar) = snapshot.build_binary_path(pending_path) {
+        if binary_sidecar.exists() {
+            std::fs::remove_file(&binary_sidecar).map_err(|e| {
+                PyValueError::new_err(format!(
+                    "Unable to remove pending binary sidecar {binary_sidecar:?}: {e}"
+                ))
+            })?;
+        }
+    }
+    std::fs::remove_file(pending_path).map_err(|e| {
+        PyValueError::new_err(format!(
+            "Unable to remove pending snapshot {pending_path:?}: {e}"
+        ))
+    })
+}
+
+/// Ensures a path is a pending snapshot file (has a trailing `.new` extension).
+fn ensure_pending(pending_path: &Path) -> PyResult<()> {
+    if pending_path.extension().and_then(|e| e.to_str()) == Some("new") {
+        Ok(())
+    } else {
+        Err(PyValueError::new_err(format!(
+            "Not a pending snapshot file (expected a trailing '.new'): {pending_path:?}"
+        )))
+    }
+}
+
+/// Accepts a pending snapshot by persisting it to its target `.snap` file.
+///
+/// The pending snapshot is loaded through insta so the committed snapshot is written with the
+/// correct format (pending-only metadata is trimmed and binary sidecars are handled). The pending
+/// `.snap.new` file (and any binary sidecar) is removed afterwards. Returns the target path.
+#[pyfunction]
+pub fn accept_pending_snapshot(pending_path: PathBuf) -> PyResult<PathBuf> {
+    ensure_pending(&pending_path)?;
+    let target = pending_path.with_extension("");
+    let snapshot = Snapshot::from_file(&pending_path).map_err(|e| {
+        PyValueError::new_err(format!(
+            "Unable to load pending snapshot from {pending_path:?}, details: {e}"
+        ))
+    })?;
+    snapshot.save(&target).map_err(|e| {
+        PyValueError::new_err(format!("Unable to save snapshot to {target:?}, details: {e}"))
+    })?;
+    remove_pending_files(&pending_path, &snapshot)?;
+    Ok(target)
+}
+
+/// Rejects a pending snapshot by deleting its `.snap.new` file (and any binary sidecar).
+#[pyfunction]
+pub fn reject_pending_snapshot(pending_path: PathBuf) -> PyResult<()> {
+    ensure_pending(&pending_path)?;
+    match Snapshot::from_file(&pending_path) {
+        Ok(snapshot) => remove_pending_files(&pending_path, &snapshot),
+        // A corrupt/unreadable pending file still needs to be cleared.
+        Err(_) => std::fs::remove_file(&pending_path).map_err(|e| {
+            PyValueError::new_err(format!(
+                "Unable to remove pending snapshot {pending_path:?}: {e}"
+            ))
+        }),
+    }
+}
+
+/// Prints insta's own diff for a pending snapshot against its committed target.
+///
+/// This renders the exact colored diff insta shows during a failing assertion, so the
+/// review workflow leans on insta rather than re-implementing diffing.
+#[pyfunction]
+#[pyo3(signature = (pending_path, workspace_root=None))]
+pub fn print_pending_diff(pending_path: PathBuf, workspace_root: Option<PathBuf>) -> PyResult<()> {
+    ensure_pending(&pending_path)?;
+    let new_snapshot = Snapshot::from_file(&pending_path).map_err(|e| {
+        PyValueError::new_err(format!(
+            "Unable to load pending snapshot from {pending_path:?}, details: {e}"
+        ))
+    })?;
+    let target = pending_path.with_extension("");
+    let old_snapshot = if target.exists() {
+        Some(Snapshot::from_file(&target).map_err(|e| {
+            PyValueError::new_err(format!("Unable to load snapshot from {target:?}, details: {e}"))
+        })?)
+    } else {
+        None
+    };
+    let root = workspace_root
+        .or_else(|| std::env::var_os("INSTA_WORKSPACE_ROOT").map(PathBuf::from))
+        .or_else(|| std::env::current_dir().ok())
+        .unwrap_or_else(|| PathBuf::from("."));
+    let title = new_snapshot
+        .snapshot_name()
+        .unwrap_or("snapshot")
+        .to_string();
+    let mut printer = SnapshotPrinter::new(&root, old_snapshot.as_ref(), &new_snapshot);
+    printer.set_show_diff(true);
+    printer.set_show_info(true);
+    printer.set_title(Some(&title));
+    printer.set_snapshot_file(Some(&target));
+    printer.print();
+    Ok(())
+}
+
 #[pymethods]
 impl SnapshotInfo {
     #[staticmethod]
@@ -193,6 +301,9 @@ fn pysnaptest(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(assert_json_snapshot, m)?)?;
     m.add_function(wrap_pyfunction!(assert_csv_snapshot, m)?)?;
     m.add_function(wrap_pyfunction!(mock_json_snapshot, m)?)?;
+    m.add_function(wrap_pyfunction!(accept_pending_snapshot, m)?)?;
+    m.add_function(wrap_pyfunction!(reject_pending_snapshot, m)?)?;
+    m.add_function(wrap_pyfunction!(print_pending_diff, m)?)?;
     m.add_class::<PySnapshot>()?;
     Ok(())
 }

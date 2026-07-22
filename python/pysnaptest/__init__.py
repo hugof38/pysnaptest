@@ -17,4 +17,13 @@ from .assertion import (
     extract_from_pytest_env,
 )
 from .mocks import mock_json_snapshot, patch_json_snapshot
+from .review import (
+    find_pending_snapshots,
+    accept_pending_snapshot,
+    reject_pending_snapshot,
+    print_pending_diff,
+    accept_all,
+    reject_all,
+    review,
+)
 from ._pysnaptest import PySnapshot
