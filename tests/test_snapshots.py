@@ -174,6 +174,17 @@ async def test_snapshot_async() -> int:
     return 5
 
 
+@pytest.mark.asyncio
+@snapshot()
+async def test_snapshot_async_parameterized() -> int:
+    return 6
+
+
+@snapshot
+def test_snapshot_bytes_uses_bin_extension() -> bytes:
+    return b"raw bytes result"
+
+
 def test_assert_snapshot_multiple():
     snapshot_name_prefix = "test_snapshots_test_assert_snapshot_multiple"
     assert_json_snapshot("expected_result_1", snapshot_name=f"{snapshot_name_prefix}_1")
