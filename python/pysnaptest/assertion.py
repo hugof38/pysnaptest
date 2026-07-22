@@ -7,7 +7,7 @@ structures.
 
 from __future__ import annotations
 
-from typing import Callable, Any, Dict, overload, Union, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Union, overload
 from functools import wraps
 import asyncio
 
@@ -74,9 +74,9 @@ def assert_json_snapshot(
     result: Any,
     snapshot_path: Optional[str] = None,
     snapshot_name: Optional[str] = None,
-    redactions: Optional[Dict[str, str | int | None]] = None,
+    redactions: Optional[Dict[str, Union[str, int, None]]] = None,
     allow_duplicates: bool = False,
-):
+) -> None:
     """Assert that a value matches a stored JSON snapshot.
 
     Args:
@@ -95,9 +95,9 @@ def assert_csv_snapshot(
     result: Any,
     snapshot_path: Optional[str] = None,
     snapshot_name: Optional[str] = None,
-    redactions: Optional[Dict[str, str | int | None]] = None,
+    redactions: Optional[Dict[str, Union[str, int, None]]] = None,
     allow_duplicates: bool = False,
-):
+) -> None:
     """Assert that CSV text matches the stored snapshot.
 
     Args:
@@ -152,12 +152,12 @@ def assert_pandas_dataframe_snapshot(
     df: pd.DataFrame,
     snapshot_path: Optional[str] = None,
     snapshot_name: Optional[str] = None,
-    redactions: Optional[Dict[str, str | int | None]] = None,
+    redactions: Optional[Dict[str, Union[str, int, None]]] = None,
     dataframe_snapshot_format: str = "csv",
     allow_duplicates: bool = False,
     *args,
     **kwargs,
-):
+) -> None:
     """Snapshot assertion for pandas DataFrames.
 
     Args:
@@ -200,12 +200,12 @@ def assert_polars_dataframe_snapshot(
     df: pl.DataFrame,
     snapshot_path: Optional[str] = None,
     snapshot_name: Optional[str] = None,
-    redactions: Optional[Dict[str, str | int | None]] = None,
+    redactions: Optional[Dict[str, Union[str, int, None]]] = None,
     dataframe_snapshot_format: str = "csv",
     allow_duplicates: bool = False,
     *args,
     **kwargs,
-):
+) -> None:
     """Snapshot assertion for polars DataFrames.
 
     Args:
@@ -248,12 +248,12 @@ def assert_dataframe_snapshot(
     df: Union[pd.DataFrame, pl.DataFrame],
     snapshot_path: Optional[str] = None,
     snapshot_name: Optional[str] = None,
-    redactions: Optional[Dict[str, str | int | None]] = None,
+    redactions: Optional[Dict[str, Union[str, int, None]]] = None,
     dataframe_snapshot_format: str = "csv",
     allow_duplicates: bool = False,
     *args,
     **kwargs,
-):
+) -> None:
     """Snapshot assertion for either pandas or polars ``DataFrame`` objects.
 
     Args:
@@ -298,11 +298,11 @@ def assert_dataframe_snapshot(
 
 def assert_binary_snapshot(
     result: bytes,
-    snapshot_path: str | None = None,
-    snapshot_name: str | None = None,
+    snapshot_path: Optional[str] = None,
+    snapshot_name: Optional[str] = None,
     extension: str = "bin",
     allow_duplicates: bool = False,
-):
+) -> None:
     """Assert that binary data matches the stored snapshot.
 
     Args:
@@ -319,10 +319,10 @@ def assert_binary_snapshot(
 
 def assert_snapshot(
     result: Any,
-    snapshot_path: str | None = None,
-    snapshot_name: str | None = None,
+    snapshot_path: Optional[str] = None,
+    snapshot_name: Optional[str] = None,
     allow_duplicates: bool = False,
-):
+) -> None:
     """Assert that a string matches the stored snapshot.
 
     Args:
@@ -340,10 +340,10 @@ def insta_snapshot(
     result: Any,
     snapshot_path: Optional[str] = None,
     snapshot_name: Optional[str] = None,
-    redactions: Optional[Dict[str, str | int | None]] = None,
+    redactions: Optional[Dict[str, Union[str, int, None]]] = None,
     dataframe_snapshot_format: str = "csv",
     allow_duplicates: bool = False,
-):
+) -> None:
     """Dispatch a value to the appropriate snapshot assertion.
 
     Args:
@@ -394,7 +394,7 @@ def snapshot(
     *,
     snapshot_path: Optional[str] = None,
     snapshot_name: Optional[str] = None,
-    redactions: Optional[Dict[str, str | int | None]] = None,
+    redactions: Optional[Dict[str, Union[str, int, None]]] = None,
     dataframe_snapshot_format: str = "csv",
     allow_duplicates: bool = False,
 ) -> Callable:  # noqa: F811
@@ -406,7 +406,7 @@ def snapshot(  # noqa: F811
     *,
     snapshot_path: Optional[str] = None,
     snapshot_name: Optional[str] = None,
-    redactions: Optional[Dict[str, str | int | None]] = None,
+    redactions: Optional[Dict[str, Union[str, int, None]]] = None,
     dataframe_snapshot_format: str = "csv",
     allow_duplicates: bool = False,
 ) -> Callable:
