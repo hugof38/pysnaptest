@@ -117,7 +117,11 @@ jobs:
           python-version: ${{ matrix.python-version }}
       
       - name: Install Dependencies
-        run: uv sync --all-extras --dev
+        # pandas/polars/pyarrow (the optional extras) don't yet ship cp314
+        # wheels; installing them on 3.14 builds from source and fails. The
+        # core suite doesn't need them (those tests skip when absent), so sync
+        # without extras on 3.14.
+        run: uv sync --dev ${{ matrix.python-version == '3.14' && '' || '--all-extras' }}
 
       - name: Tests Python
         run: uv run pytest
