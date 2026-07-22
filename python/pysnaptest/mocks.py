@@ -6,12 +6,12 @@ are automatically snapshot tested.
 
 from __future__ import annotations
 
-from typing import Callable, Dict, Optional
+from typing import Callable, Dict, Optional, Union
 import importlib
 from unittest.mock import patch
 import functools
 
-from ._pysnaptest import mock_json_snapshot as _mock_json_snapshot, SnapshotInfo
+from ._pysnaptest import mock_json_snapshot as _mock_json_snapshot
 from .assertion import extract_from_pytest_env
 
 
@@ -20,7 +20,7 @@ def mock_json_snapshot(
     record: bool = False,
     snapshot_path: Optional[str] = None,
     snapshot_name: Optional[str] = None,
-    redactions: Optional[Dict[str, str | int | None]] = None,
+    redactions: Optional[Dict[str, Union[str, int, None]]] = None,
     allow_duplicates: bool = False,
 ):
     """Return a function mock that snapshots its JSON result.
@@ -69,7 +69,7 @@ class patch_json_snapshot:
         record: bool = False,
         snapshot_path: Optional[str] = None,
         snapshot_name: Optional[str] = None,
-        redactions: Optional[Dict[str, str | int | None]] = None,
+        redactions: Optional[Dict[str, Union[str, int, None]]] = None,
         allow_duplicates: bool = False,
     ):
         """Create the patch configuration.
