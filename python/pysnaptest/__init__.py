@@ -1,7 +1,12 @@
 """Public API for :mod:`pysnaptest`.
 
-This module re-exports the most commonly used helpers so they can be imported
-directly from ``pysnaptest``.
+This module re-exports the most commonly used snapshot-assertion helpers so they
+can be imported directly from ``pysnaptest``.
+
+The cargo-free review workflow (accepting/rejecting pending snapshots) is kept
+separate from the assertion library. Import those helpers from
+:mod:`pysnaptest.review`, run the CLI with ``pysnaptest``, or enable the pytest
+plugin via ``pysnaptest.pytest_plugin``.
 """
 
 # ruff: noqa: F401
@@ -17,13 +22,4 @@ from .assertion import (
     extract_from_pytest_env,
 )
 from .mocks import mock_json_snapshot, patch_json_snapshot
-from .review import (
-    find_pending_snapshots,
-    accept_pending_snapshot,
-    reject_pending_snapshot,
-    print_pending_diff,
-    accept_all,
-    reject_all,
-    review,
-)
 from ._pysnaptest import PySnapshot
