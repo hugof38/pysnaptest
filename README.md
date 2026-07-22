@@ -59,11 +59,59 @@ def test_use_http_request():
 
 ## Updating Snapshots
 
-If the output changes intentionally, you can review and update snapshots using
-`cargo-insta review`. The tool used for this, `cargo-insta`, is distributed via
-Rust's package manager `cargo`.
+If the output changes intentionally, you can review and update snapshots in two
+ways: with the built-in, cargo-free workflow (recommended for Python projects)
+or with `cargo-insta review`.
 
-### Installing `cargo-insta`
+### Reviewing without cargo (recommended)
+
+`pysnaptest` ships a pytest plugin and a small CLI so you can create, update, and
+accept snapshots without installing any Rust tooling. insta itself does the work
+of diffing and writing snapshots; the plugin only selects the update mode.
+
+Update snapshots in place while running your tests (they pass on update, just
+like other Python snapshot tools):
+
+```bash
+pytest --snapshot-update
+```
+
+Prefer to inspect changes and accept them yourself? Record pending `*.snap.new`
+files instead, then review them the way `cargo insta review` does — one snapshot
+at a time, showing insta's own diff and prompting to accept, reject, or skip:
+
+```bash
+pytest --snapshot-new          # record changed snapshots as pending files
+pysnaptest review              # interactively review each pending snapshot
+```
+
+You can also act on all pending snapshots at once:
+
+```bash
+pysnaptest pending             # list pending snapshots with their diffs
+pysnaptest accept              # accept every pending snapshot
+pysnaptest reject              # discard every pending snapshot
+```
+
+The diffs shown by `review` and `pending` are rendered by insta itself, so they
+match exactly what you see from a failing assertion or `cargo insta review`.
+
+You can also drive this from Python:
+
+```python
+from pysnaptest import find_pending_snapshots, accept_pending_snapshot
+
+for pending in find_pending_snapshots():
+    accept_pending_snapshot(pending)
+```
+
+Set `INSTA_WORKSPACE_ROOT` so both the plugin and the CLI agree on where
+snapshots live (see the example project's `pytest.ini`).
+
+### Reviewing with `cargo-insta`
+
+You can also use the [`cargo-insta`](https://insta.rs/) reviewer, which is
+distributed via Rust's package manager `cargo`.
 
 1. Install Rust using [rustup](https://rustup.rs/) if it is not already present.
 2. Install the CLI with:
