@@ -15,6 +15,10 @@ capabilities that peers don't offer out of the box:
   for free — no other Python tool reads and writes insta snapshots.
 - **First-class DataFrame snapshots.** Snapshot pandas or polars `DataFrame`
   objects directly, serialized as CSV, JSON, parquet, or insta's binary format.
+- **Automatic serialization of rich objects.** JSON snapshots normalize Pydantic
+  models, dataclasses, enums and common standard-library types (`datetime`,
+  `UUID`, `Decimal`, `set`, ...) into JSON automatically — no manual
+  `.model_dump()` needed. Provide a `custom_encoder` for your own types.
 - **Mock-and-snapshot external calls.** `patch_json_snapshot` records the JSON
   result of a patched function as a snapshot, so tests that hit external APIs
   become deterministic without hand-written fixtures.
@@ -73,6 +77,64 @@ def test_use_http_request():
     return use_http_request()
 ```
 
+### Snapshotting Pydantic models and other rich types
+
+JSON snapshots (`assert_json_snapshot`, and `@snapshot` on a model return value)
+automatically serialize Pydantic models, dataclasses, enums, `datetime`,
+`UUID`, `Decimal`, `set`/`frozenset`, tuples and mappings into plain JSON. This
+also works for collections of models — for example a list of models with a
+`date` field, which serializes each item and formats the date as an ISO string:
+
+```python
+from datetime import date
+from pydantic import BaseModel
+from pysnaptest import snapshot
+
+class Event(BaseModel):
+    name: str
+    happened_on: date
+
+@snapshot
+def test_events():
+    return [
+        Event(name="launch", happened_on=date(2026, 1, 15)),
+        Event(name="review", happened_on=date(2026, 3, 2)),
+    ]
+```
+
+The snapshot for the test above looks like:
+
+```json
+[
+  {
+    "happened_on": "2026-01-15",
+    "name": "launch"
+  },
+  {
+    "happened_on": "2026-03-02",
+    "name": "review"
+  }
+]
+```
+
+Redaction selectors operate on the serialized fields, so
+`redactions={".created_at": "[ts]"}` works as expected. To serialize your own
+types, pass a `custom_encoder` mapping types to encoder callables (mirroring
+FastAPI's `jsonable_encoder`):
+
+```python
+assert_json_snapshot(
+    {"point": my_point},
+    custom_encoder={Point: lambda p: {"x": p.x, "y": p.y}},
+)
+```
+
+> **Note:** This is a behavior change from earlier versions, where objects that
+> weren't native `dict`/`list`/`bytes`/`DataFrame` values were snapshotted using
+> their string representation. Such objects are now serialized to JSON. Pass a
+> `DataFrame` to `assert_dataframe_snapshot` — `assert_json_snapshot` raises a
+> `TypeError` for DataFrames.
+
 ### Which API do I use?
 
 All three entry points write the same insta snapshots — pick based on how your
@@ -80,8 +142,8 @@ test is shaped:
 
 - **`@snapshot`** — when the thing you want to snapshot is a test function's
   return value. It auto-detects the type (dict/list → JSON, `bytes` → binary,
-  pandas/polars → DataFrame, everything else → text) and works on `async`
-  tests too.
+  pandas/polars → DataFrame, Pydantic models / dataclasses / enums / sets /
+  mappings → JSON, everything else → text) and works on `async` tests too.
 - **`assert_json_snapshot` / `assert_snapshot` / `assert_csv_snapshot` /
   `assert_binary_snapshot` / `assert_dataframe_snapshot`** — when you want to
   assert a value mid-test, or need explicit control over the format, path, name,

@@ -1,0 +1,10 @@
+---
+source: src/lib.rs
+description: "Test File Path: tests/test_encoders.py"
+---
+{
+  "point": {
+    "px": 4,
+    "py": 5
+  }
+}

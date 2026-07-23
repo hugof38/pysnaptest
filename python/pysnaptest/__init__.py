@@ -21,6 +21,7 @@ from .assertion import (
     extract_from_pytest_env,
 )
 from .mocks import mock_json_snapshot, patch_json_snapshot
+from .encoders import to_jsonable, is_jsonable_object
 from ._pysnaptest import PySnapshot
 
 __all__ = [
@@ -35,5 +36,7 @@ __all__ = [
     "extract_from_pytest_env",
     "mock_json_snapshot",
     "patch_json_snapshot",
+    "to_jsonable",
+    "is_jsonable_object",
     "PySnapshot",
 ]
