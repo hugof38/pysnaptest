@@ -28,8 +28,8 @@ from uuid import UUID
 def is_pydantic(obj: Any) -> bool:
     """Check whether ``obj`` is a Pydantic ``BaseModel`` instance.
 
-    Both Pydantic v1 and v2 models are recognised, including models built with
-    Pydantic v2's ``pydantic.v1`` compatibility shim.
+    Works with both Pydantic v1 and v2: ``pydantic.BaseModel`` always refers to
+    the installed version's base class.
 
     Args:
         obj: Object to test.
@@ -43,23 +43,13 @@ def is_pydantic(obj: Any) -> bool:
     except ImportError:
         return False
 
-    bases = [pydantic.BaseModel]
-    if getattr(pydantic, "VERSION", "1").startswith("2"):
-        try:
-            from pydantic.v1 import BaseModel as V1BaseModel
-
-            bases.append(V1BaseModel)
-        except ImportError:
-            pass
-
-    return isinstance(obj, tuple(bases))
+    return isinstance(obj, pydantic.BaseModel)
 
 
 def _pydantic_to_dict(obj: Any) -> Any:
     """Dump a Pydantic model to a JSON-native ``dict``.
 
-    Uses ``model_dump(mode="json")`` for v2 models and ``.dict()`` for v1 models
-    (including the ``pydantic.v1`` compatibility shim).
+    Uses ``model_dump(mode="json")`` for v2 models and ``.dict()`` for v1 models.
 
     Args:
         obj: A Pydantic model instance.
