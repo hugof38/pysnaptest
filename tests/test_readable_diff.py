@@ -85,7 +85,6 @@ def test_pandas_parquet_readable_diff_csv(tmp_path: Path):
             snapshot_name=name,
             dataframe_snapshot_format="parquet",
             readable_diff="csv",
-            allow_duplicates=True,
         )
 
     message = str(exc.value)
@@ -109,7 +108,6 @@ def test_pandas_parquet_readable_diff_json(tmp_path: Path):
             snapshot_name=name,
             dataframe_snapshot_format="parquet",
             readable_diff="json",
-            allow_duplicates=True,
         )
 
     message = str(exc.value)
@@ -132,7 +130,6 @@ def test_pandas_parquet_readable_diff_matches(tmp_path: Path):
         snapshot_name=name,
         dataframe_snapshot_format="parquet",
         readable_diff="csv",
-        allow_duplicates=True,
     )
 
 
@@ -150,7 +147,6 @@ def test_pandas_parquet_byte_only_default(tmp_path: Path):
             snapshot_path=str(snap_dir),
             snapshot_name=name,
             dataframe_snapshot_format="parquet",
-            allow_duplicates=True,
         )
 
     # Without readable_diff the message stays byte-only (no rendered diff).
@@ -172,7 +168,6 @@ def test_polars_bin_readable_diff_csv(tmp_path: Path):
             snapshot_name=name,
             dataframe_snapshot_format="bin",
             readable_diff="csv",
-            allow_duplicates=True,
         )
 
     message = str(exc.value)
