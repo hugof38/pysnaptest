@@ -126,17 +126,27 @@ pub fn assert_snapshot(test_info: &SnapshotInfo, result: &Bound<'_, PyAny>) -> P
     })
 }
 
-/// Removes a pending `.snap.new` file and, for binary snapshots, its sidecar data file.
-fn remove_pending_files(pending_path: &Path, snapshot: &Snapshot) -> PyResult<()> {
-    if let Some(binary_sidecar) = snapshot.build_binary_path(pending_path) {
-        if binary_sidecar.exists() {
-            std::fs::remove_file(&binary_sidecar).map_err(|e| {
-                PyValueError::new_err(format!(
-                    "Unable to remove pending binary sidecar {binary_sidecar:?}: {e}"
-                ))
+/// Removes a snapshot's binary sidecar data file, if it has one.
+///
+/// The sidecar path is resolved through insta's own [`Snapshot::build_binary_path`]
+/// so we only ever touch the data file insta actually wrote (e.g. `@pysnap.snap.parquet`)
+/// and never an unrelated sibling such as a `.snap.new` pending file. Returns the
+/// removed sidecar path, or `None` when the snapshot is text-only or has no sidecar.
+fn remove_binary_sidecar(path: &Path, snapshot: &Snapshot) -> PyResult<Option<PathBuf>> {
+    if let Some(sidecar) = snapshot.build_binary_path(path) {
+        if sidecar.exists() {
+            std::fs::remove_file(&sidecar).map_err(|e| {
+                PyValueError::new_err(format!("Unable to remove binary sidecar {sidecar:?}: {e}"))
             })?;
+            return Ok(Some(sidecar));
         }
     }
+    Ok(None)
+}
+
+/// Removes a pending `.snap.new` file and, for binary snapshots, its sidecar data file.
+fn remove_pending_files(pending_path: &Path, snapshot: &Snapshot) -> PyResult<()> {
+    remove_binary_sidecar(pending_path, snapshot)?;
     std::fs::remove_file(pending_path).map_err(|e| {
         PyValueError::new_err(format!(
             "Unable to remove pending snapshot {pending_path:?}: {e}"
@@ -191,6 +201,29 @@ pub fn reject_pending_snapshot(pending_path: PathBuf) -> PyResult<()> {
             ))
         }),
     }
+}
+
+/// Deletes a committed snapshot file and its binary sidecar data file (if any).
+///
+/// The sidecar is resolved through insta's own [`Snapshot::build_binary_path`],
+/// the same primitive used to clean up pending files, so obsolete-snapshot
+/// deletion (`pysnaptest unused --delete`) removes exactly what insta wrote and
+/// never an unrelated sibling such as a `.snap.new` pending file. Returns the
+/// removed paths (the sidecar first, when present, then the metadata file). A
+/// corrupt/unreadable metadata file is still removed.
+#[pyfunction]
+pub fn delete_snapshot(snapshot_path: PathBuf) -> PyResult<Vec<PathBuf>> {
+    let mut removed = Vec::new();
+    if let Ok(snapshot) = Snapshot::from_file(&snapshot_path) {
+        if let Some(sidecar) = remove_binary_sidecar(&snapshot_path, &snapshot)? {
+            removed.push(sidecar);
+        }
+    }
+    std::fs::remove_file(&snapshot_path).map_err(|e| {
+        PyValueError::new_err(format!("Unable to remove snapshot {snapshot_path:?}: {e}"))
+    })?;
+    removed.push(snapshot_path);
+    Ok(removed)
 }
 
 /// Prints insta's own diff for a pending snapshot against its committed target.
@@ -293,7 +326,7 @@ impl SnapshotInfo {
             .unwrap_or(module_path!().to_string())
             .replace("::", "__");
         Ok(self.snapshot_folder.join(format!(
-            "{module_path}__{}@pysnap.snap",
+            "{module_path}__{}{SNAPSHOT_FILE_SUFFIX}",
             self.last_snapshot_name()
         )))
     }
@@ -303,7 +336,7 @@ impl SnapshotInfo {
             .unwrap_or(module_path!().to_string())
             .replace("::", "__");
         Ok(self.snapshot_folder.join(format!(
-            "{module_path}__{}@pysnap.snap",
+            "{module_path}__{}{SNAPSHOT_FILE_SUFFIX}",
             self.next_snapshot_name()
         )))
     }
@@ -314,6 +347,7 @@ impl SnapshotInfo {
 fn pysnaptest(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<SnapshotInfo>()?;
 
+    m.add("SNAPSHOT_SUFFIX", SNAPSHOT_FILE_SUFFIX)?;
     m.add_function(wrap_pyfunction!(assert_snapshot, m)?)?;
     m.add_function(wrap_pyfunction!(assert_binary_snapshot, m)?)?;
     m.add_function(wrap_pyfunction!(assert_json_snapshot, m)?)?;
@@ -323,6 +357,7 @@ fn pysnaptest(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(read_json_snapshot, m)?)?;
     m.add_function(wrap_pyfunction!(accept_pending_snapshot, m)?)?;
     m.add_function(wrap_pyfunction!(reject_pending_snapshot, m)?)?;
+    m.add_function(wrap_pyfunction!(delete_snapshot, m)?)?;
     m.add_function(wrap_pyfunction!(print_pending_diff, m)?)?;
     m.add_class::<PySnapshot>()?;
     Ok(())

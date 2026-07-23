@@ -19,11 +19,18 @@ from ._pysnaptest import (
     accept_pending_snapshot as _accept_pending_snapshot,
     reject_pending_snapshot as _reject_pending_snapshot,
     print_pending_diff as _print_pending_diff,
+    SNAPSHOT_SUFFIX,
 )
+
+#: Glob that matches only pysnaptest's own committed snapshots. ``SNAPSHOT_SUFFIX``
+#: (``@pysnap.snap``) is defined once in Rust (``src/common.rs``) and exported by
+#: the compiled ``_pysnaptest`` module, so ``review`` and ``unused`` always agree
+#: with the snapshot files insta actually writes.
+SNAPSHOT_GLOB = f"**/*{SNAPSHOT_SUFFIX}"
 
 #: Glob that matches only pysnaptest's own pending snapshots, so review never
 #: touches pending files produced by other snapshot tools.
-PENDING_GLOB = "**/*@pysnap.snap.new"
+PENDING_GLOB = f"{SNAPSHOT_GLOB}.new"
 
 
 def _root(root: Optional[str]) -> Path:

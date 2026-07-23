@@ -18,6 +18,13 @@ use pyo3::types::PyAnyMethods;
 
 const PYSNAPSHOT_SUFFIX: &str = "pysnap";
 
+/// Filename tail of every committed pysnaptest snapshot, e.g.
+/// `foo@pysnap.snap`. insta composes snapshot files as `<name>@<suffix>.snap`,
+/// so this is `@{PYSNAPSHOT_SUFFIX}.snap`. Exposed to Python
+/// (`pysnaptest._pysnaptest.SNAPSHOT_SUFFIX`) so `review`/`unused` derive their
+/// globs from the same source of truth.
+pub const SNAPSHOT_FILE_SUFFIX: &str = "@pysnap.snap";
+
 static TEST_NAME_COUNTERS: Lazy<Mutex<BTreeMap<String, usize>>> =
     Lazy::new(|| Mutex::new(BTreeMap::new()));
 
