@@ -128,11 +128,9 @@ jobs:
     strategy:
       matrix:
         platform:
-          # macos-13 (the last Intel image) is being retired, so jobs pinned to
-          # it hang forever waiting for a runner. Cross-compile the x86_64 wheel
-          # on an Apple Silicon runner instead; maturin-action adds the target.
-          - runner: macos-14
-            target: x86_64
+          # Only build the native Apple Silicon (aarch64) wheel. The x86_64
+          # cross-compile on macos-14 produced buggy wheels, and macos-13 (the
+          # last native Intel image) is retired, so Intel macOS is dropped.
           - runner: macos-14
             target: aarch64
     steps:
