@@ -23,8 +23,9 @@ use std::{
 use csv::ReaderBuilder;
 use insta::output::SnapshotPrinter;
 use insta::Snapshot;
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyAssertionError, PyValueError};
 use pyo3::prelude::*;
+use pyo3::types::PyBytes;
 
 /// Binds insta settings (path, redactions) and asserts a JSON snapshot under an
 /// explicit `snapshot_name`.
@@ -99,19 +100,81 @@ pub fn assert_csv_snapshot(
 }
 
 #[pyfunction]
+#[pyo3(signature = (test_info, extension, result, readable_diff_renderer=None))]
 pub fn assert_binary_snapshot(
+    py: Python<'_>,
     test_info: &SnapshotInfo,
     extension: &str,
     result: Vec<u8>,
+    readable_diff_renderer: Option<PyObject>,
 ) -> PyResult<()> {
     let snapshot_name = test_info.snapshot_name();
     let settings: insta::Settings = test_info.try_into()?;
     let snapshot_label = snapshot_name.clone();
-    panic::run_snapshot_assertion(&snapshot_label, || {
+
+    // Fast path: without a renderer this is a plain byte-compared binary snapshot.
+    let Some(renderer) = readable_diff_renderer else {
+        return panic::run_snapshot_assertion(&snapshot_label, || {
+            settings.bind(|| {
+                insta::assert_binary_snapshot!(
+                    format!("{snapshot_name}.{extension}").as_str(),
+                    result
+                );
+            });
+        });
+    };
+
+    // Equality is still insta's exact byte comparison. Rust owns the whole
+    // compare/mismatch/raise flow; the renderer is the only Python step (it
+    // decodes the binary DataFrame, which needs pandas/polars). Read the
+    // committed sidecar up front so a mismatch can be rendered against it.
+    let module_prefix = module_path!().replace("::", "__");
+    let sidecar = test_info.snapshot_folder().join(format!(
+        "{module_prefix}__{snapshot_name}@pysnap.snap.{extension}"
+    ));
+    let previous = std::fs::read(&sidecar).ok();
+    let new_bytes = result.clone();
+
+    let matched = panic::run_snapshot_assertion_matched(&snapshot_label, || {
         settings.bind(|| {
             insta::assert_binary_snapshot!(format!("{snapshot_name}.{extension}").as_str(), result);
         });
-    })
+    })?;
+    if matched {
+        return Ok(());
+    }
+
+    let base = format!(
+        "snapshot '{snapshot_label}' did not match the stored value (readable diff below). \
+         Update the snapshot if this change is intentional."
+    );
+    let Some(previous) = previous else {
+        // First run: no committed snapshot to diff against.
+        return Err(PyAssertionError::new_err(base));
+    };
+
+    let renderer = renderer.bind(py);
+    let old_text: String = renderer.call1((PyBytes::new(py, &previous),))?.extract()?;
+    let new_text: String = renderer.call1((PyBytes::new(py, &new_bytes),))?.extract()?;
+    let diff = render_text_diff(&old_text, &new_text, Some("committed"), Some("new"));
+    Err(PyAssertionError::new_err(format!("{base}\n\n{diff}")))
+}
+
+/// Renders a unified diff between two text renderings using the same diff engine
+/// insta uses (`similar`). Used to show a human-readable CSV/JSON diff for binary
+/// DataFrame snapshots whose raw bytes differ.
+#[pyfunction]
+#[pyo3(signature = (old, new, old_label=None, new_label=None))]
+pub fn render_text_diff(
+    old: &str,
+    new: &str,
+    old_label: Option<&str>,
+    new_label: Option<&str>,
+) -> String {
+    let diff = similar::TextDiff::from_lines(old, new);
+    let mut unified = diff.unified_diff();
+    unified.header(old_label.unwrap_or("committed"), new_label.unwrap_or("new"));
+    unified.to_string()
 }
 
 #[pyfunction]
@@ -350,6 +413,7 @@ fn pysnaptest(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("SNAPSHOT_SUFFIX", SNAPSHOT_FILE_SUFFIX)?;
     m.add_function(wrap_pyfunction!(assert_snapshot, m)?)?;
     m.add_function(wrap_pyfunction!(assert_binary_snapshot, m)?)?;
+    m.add_function(wrap_pyfunction!(render_text_diff, m)?)?;
     m.add_function(wrap_pyfunction!(assert_json_snapshot, m)?)?;
     m.add_function(wrap_pyfunction!(assert_csv_snapshot, m)?)?;
     m.add_function(wrap_pyfunction!(prepare_mock_call, m)?)?;
