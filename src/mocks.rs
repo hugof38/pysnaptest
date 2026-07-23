@@ -26,7 +26,8 @@
 //! call site) is preserved.
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::io::Write;
+use std::path::{Path, PathBuf};
 
 use insta::internals::SnapshotContents;
 use insta::Snapshot;
@@ -34,6 +35,25 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
 use crate::{RedactionType, SnapshotInfo};
+
+/// Records `snapshot_path` as referenced, mirroring insta's own
+/// `memoize_snapshot_file`: when `INSTA_SNAPSHOT_REFERENCES_FILE` is set, append
+/// the path (one per line) so obsolete-snapshot detection sees it as used.
+///
+/// Best-effort: does nothing if the variable is unset or the append fails, just
+/// like insta. This exists only because mock replay returns a recorded value
+/// without running an insta assertion, so insta itself never memoizes the file.
+fn memoize_snapshot_reference(snapshot_path: &Path) {
+    if let Ok(ref_file) = std::env::var("INSTA_SNAPSHOT_REFERENCES_FILE") {
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open(ref_file)
+        {
+            let _ = writeln!(f, "{}", snapshot_path.display());
+        }
+    }
+}
 
 /// Scope `test_info` to a mock of `suffix`, write its request snapshot, and
 /// report where/whether the response should be recorded.
@@ -98,6 +118,12 @@ pub fn assert_json_snapshot_named(
 /// Used by the Python mock layer during replay: the recorded response is loaded
 /// through insta (so the snapshot file format is handled in one place) and
 /// converted back into native Python objects.
+///
+/// Replay is the one path that returns a snapshot's value *without* running an
+/// insta assertion, so insta never memoizes the file as "referenced". To keep
+/// obsolete-snapshot detection accurate we record the reference ourselves,
+/// exactly as insta's own `memoize_snapshot_file` does: append the path to the
+/// file named by `INSTA_SNAPSHOT_REFERENCES_FILE` (set by `pysnaptest unused`).
 #[pyfunction]
 pub fn read_json_snapshot(snapshot_path: PathBuf) -> PyResult<PyObject> {
     let snapshot = Snapshot::from_file(&snapshot_path).map_err(|e| {
@@ -105,6 +131,7 @@ pub fn read_json_snapshot(snapshot_path: PathBuf) -> PyResult<PyObject> {
             "Unable to load snapshot from {snapshot_path:?}: {e}"
         ))
     })?;
+    memoize_snapshot_reference(&snapshot_path);
     match snapshot.contents() {
         SnapshotContents::Text(content) => Python::with_gil(|py| {
             let value: serde_json::Value =

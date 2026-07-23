@@ -24,6 +24,8 @@ capabilities that peers don't offer out of the box:
   become deterministic without hand-written fixtures.
 - **Insta redaction selectors** for scrubbing nondeterministic fields (ids,
   timestamps) before comparison.
+- **Obsolete-snapshot detection.** Helpers to find `.snap` files that no test
+  references any more, so snapshot directories don't rot as tests change.
 
 It also keeps the basics other tools give you:
 
@@ -129,11 +131,8 @@ assert_json_snapshot(
 )
 ```
 
-> **Note:** This is a behavior change from earlier versions, where objects that
-> weren't native `dict`/`list`/`bytes`/`DataFrame` values were snapshotted using
-> their string representation. Such objects are now serialized to JSON. Pass a
-> `DataFrame` to `assert_dataframe_snapshot` — `assert_json_snapshot` raises a
-> `TypeError` for DataFrames.
+Pass a `DataFrame` to `assert_dataframe_snapshot`; `assert_json_snapshot` raises
+a `TypeError` for DataFrames.
 
 ### Which API do I use?
 
@@ -154,9 +153,10 @@ test is shaped:
 
 ## Updating Snapshots
 
-If the output changes intentionally, you can review and update snapshots in two
-ways: with the built-in, cargo-free workflow (recommended for Python projects)
-or with `cargo-insta review`.
+If the output changes intentionally, you can review and update snapshots with the
+built-in, cargo-free workflow (recommended for Python projects). If you already
+use Rust tooling, `cargo-insta` also works — see [Reviewing with
+`cargo-insta`](#reviewing-with-cargo-insta).
 
 ### Reviewing without cargo (recommended)
 
@@ -172,8 +172,8 @@ pytest --snapshot-update
 ```
 
 Prefer to inspect changes and accept them yourself? Record pending `*.snap.new`
-files instead, then review them the way `cargo insta review` does — one snapshot
-at a time, showing insta's own diff and prompting to accept, reject, or skip:
+files instead, then review them one snapshot at a time, showing insta's own diff
+and prompting to accept, reject, or skip:
 
 ```bash
 pytest --snapshot-new          # record changed snapshots as pending files
@@ -189,7 +189,7 @@ pysnaptest reject              # discard every pending snapshot
 ```
 
 The diffs shown by `review` and `pending` are rendered by insta itself, so they
-match exactly what you see from a failing assertion or `cargo insta review`.
+match exactly what you see from a failing assertion.
 
 You can also drive this from Python:
 
@@ -228,6 +228,29 @@ tests so both the library and `cargo-insta` know where snapshots are stored. In
 the example project the tests are inside a `tests` folder, so `pytest.ini` sets
 `INSTA_WORKSPACE_ROOT=tests`, allowing the CLI to find
 `examples/my_project/tests/snapshots`.
+
+## Detecting obsolete snapshots
+
+As tests are renamed or removed, their `.snap` files are left behind. The
+`pysnaptest unused` command runs your test suite once and reports the committed
+snapshots that no test referenced:
+
+```bash
+pysnaptest unused              # run the suite and list unreferenced snapshots
+pysnaptest unused --delete     # ...and delete them (plus any binary sidecars)
+```
+
+Because the whole suite runs, a snapshot is flagged only when its owning test
+module still exists. Pass extra pytest arguments after `--`:
+
+```bash
+pysnaptest unused --delete -- -k integration
+```
+
+Without `--delete`, the command exits non-zero when it finds unreferenced
+snapshots, so it can gate CI. The `pysnaptest.unused` module exposes the same
+building blocks (`find_unused_snapshots`, `delete_snapshot`, ...) if you want to
+script it directly.
 
 
 ## Examples
