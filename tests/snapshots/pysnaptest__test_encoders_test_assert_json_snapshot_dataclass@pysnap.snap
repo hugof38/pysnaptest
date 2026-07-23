@@ -1,0 +1,18 @@
+---
+source: src/lib.rs
+description: "Test File Path: tests/test_encoders.py"
+---
+{
+  "end": {
+    "x": 2,
+    "y": 3
+  },
+  "start": {
+    "x": 0,
+    "y": 0
+  },
+  "tags": [
+    "a",
+    "b"
+  ]
+}

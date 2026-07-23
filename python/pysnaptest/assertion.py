@@ -18,6 +18,7 @@ from ._pysnaptest import (
     assert_binary_snapshot as _assert_binary_snapshot,
     SnapshotInfo,
 )
+from .encoders import is_jsonable_object, to_jsonable
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -76,8 +77,14 @@ def assert_json_snapshot(
     snapshot_name: Optional[str] = None,
     redactions: Optional[Dict[str, Union[str, int, None]]] = None,
     allow_duplicates: bool = False,
+    custom_encoder: Optional[Dict[type, Callable[[Any], Any]]] = None,
 ) -> None:
     """Assert that a value matches a stored JSON snapshot.
+
+    The ``result`` is normalized with :func:`pysnaptest.to_jsonable` before being
+    serialized, so Pydantic models, dataclasses, enums and common
+    standard-library types (``datetime``, ``UUID``, ``Decimal``, ...) are
+    supported automatically.
 
     Args:
         result: Object that will be serialized to JSON.
@@ -85,8 +92,21 @@ def assert_json_snapshot(
         snapshot_name: Optional name override for the snapshot file.
         redactions: Mapping of selectors to replacement values.
         allow_duplicates: Whether to allow duplicate snapshot names.
+        custom_encoder: Optional mapping of types to encoder callables used when
+            normalizing ``result``.
+
+    Raises:
+        TypeError: If ``result`` is a pandas or polars ``DataFrame``. Use
+            :func:`assert_dataframe_snapshot` instead.
     """
 
+    if try_is_pandas_df(result) or try_is_polars_df(result):
+        raise TypeError(
+            "DataFrames are not supported by assert_json_snapshot. Use "
+            "assert_dataframe_snapshot(df, dataframe_snapshot_format='json') instead."
+        )
+
+    result = to_jsonable(result, custom_encoder=custom_encoder)
     test_info = extract_from_pytest_env(snapshot_path, snapshot_name, allow_duplicates)
     _assert_json_snapshot(test_info, result, redactions)
 
@@ -343,21 +363,33 @@ def insta_snapshot(
     redactions: Optional[Dict[str, Union[str, int, None]]] = None,
     dataframe_snapshot_format: str = "csv",
     allow_duplicates: bool = False,
+    custom_encoder: Optional[Dict[type, Callable[[Any], Any]]] = None,
 ) -> None:
     """Dispatch a value to the appropriate snapshot assertion.
 
     Args:
         result: Value to snapshot. Supported types include ``dict``, ``list``,
-            ``bytes`` and pandas or polars ``DataFrame`` objects.
+            ``bytes``, pandas or polars ``DataFrame`` objects, and any object
+            recognised by :func:`pysnaptest.to_jsonable` (Pydantic models,
+            dataclasses, enums, sets, tuples and mappings).
         snapshot_path: Optional path override for storing the snapshot.
         snapshot_name: Optional name override for the snapshot file.
         redactions: Mapping of selectors to replacement values.
         dataframe_snapshot_format: Format used when snapshotting DataFrames.
         allow_duplicates: Whether to allow duplicate snapshot names.
+        custom_encoder: Optional mapping of types to encoder callables used when
+            normalizing JSON snapshots.
     """
 
     if isinstance(result, (dict, list)):
-        assert_json_snapshot(result, snapshot_path, snapshot_name, redactions)
+        assert_json_snapshot(
+            result,
+            snapshot_path,
+            snapshot_name,
+            redactions,
+            allow_duplicates,
+            custom_encoder=custom_encoder,
+        )
     elif isinstance(result, bytes):
         assert_binary_snapshot(
             result,
@@ -373,6 +405,15 @@ def insta_snapshot(
             redactions,
             dataframe_snapshot_format,
             allow_duplicates,
+        )
+    elif is_jsonable_object(result):
+        assert_json_snapshot(
+            result,
+            snapshot_path,
+            snapshot_name,
+            redactions,
+            allow_duplicates,
+            custom_encoder=custom_encoder,
         )
     else:
         if redactions is not None:
@@ -397,6 +438,7 @@ def snapshot(
     redactions: Optional[Dict[str, Union[str, int, None]]] = None,
     dataframe_snapshot_format: str = "csv",
     allow_duplicates: bool = False,
+    custom_encoder: Optional[Dict[type, Callable[[Any], Any]]] = None,
 ) -> Callable:  # noqa: F811
     ...
 
@@ -409,6 +451,7 @@ def snapshot(  # noqa: F811
     redactions: Optional[Dict[str, Union[str, int, None]]] = None,
     dataframe_snapshot_format: str = "csv",
     allow_duplicates: bool = False,
+    custom_encoder: Optional[Dict[type, Callable[[Any], Any]]] = None,
 ) -> Callable:
     """Decorator that snapshots the return value of ``func``.
 
@@ -419,6 +462,8 @@ def snapshot(  # noqa: F811
         redactions: Mapping of selectors to replacement values.
         dataframe_snapshot_format: Format used when snapshotting DataFrames.
         allow_duplicates: Whether to allow duplicate snapshot names.
+        custom_encoder: Optional mapping of types to encoder callables used when
+            normalizing JSON snapshots.
 
     Returns:
         Callable: The wrapped function.
@@ -440,6 +485,7 @@ def snapshot(  # noqa: F811
                     redactions=redactions,
                     dataframe_snapshot_format=dataframe_snapshot_format,
                     allow_duplicates=allow_duplicates,
+                    custom_encoder=custom_encoder,
                 )
 
             return asserted_func
@@ -454,6 +500,7 @@ def snapshot(  # noqa: F811
                 redactions=redactions,
                 dataframe_snapshot_format=dataframe_snapshot_format,
                 allow_duplicates=allow_duplicates,
+                custom_encoder=custom_encoder,
             )
 
         return asserted_func

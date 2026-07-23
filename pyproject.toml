@@ -36,4 +36,5 @@ testpaths = "tests"
 dev = [
   "pytest>=8.3.4",
   "pytest-asyncio>=0.24.0",
+  "pydantic>=2",
 ]

@@ -1,0 +1,28 @@
+---
+source: src/lib.rs
+description: "Test File Path: tests/test_encoders.py"
+---
+[
+  {
+    "address": {
+      "street": "1 Main St",
+      "zipcode": "00000"
+    },
+    "balance": "10.50",
+    "created_at": "2020-01-01T00:00:00",
+    "name": "Ada",
+    "role": "green",
+    "user_id": "00000000-0000-0000-0000-000000000001"
+  },
+  {
+    "address": {
+      "street": "1 Main St",
+      "zipcode": "00000"
+    },
+    "balance": "10.50",
+    "created_at": "2020-01-01T00:00:00",
+    "name": "Ada",
+    "role": "green",
+    "user_id": "00000000-0000-0000-0000-000000000001"
+  }
+]
