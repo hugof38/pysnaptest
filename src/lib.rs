@@ -26,6 +26,31 @@ use insta::Snapshot;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
+/// Binds insta settings (path, redactions) and asserts a JSON snapshot under an
+/// explicit `snapshot_name`.
+///
+/// The `insta::assert_json_snapshot!` call is emitted at the macro's *invocation*
+/// site, so the on-disk `<module_path>__<name>@pysnap.snap` prefix follows the
+/// module that uses this macro. Keeping the assertion in one place lets both the
+/// counter-based [`assert_json_snapshot`] and the mock layer's
+/// `assert_json_snapshot_named` share identical settings and panic handling.
+#[macro_export]
+macro_rules! bind_json_snapshot {
+    ($test_info:expr, $res:expr, $snapshot_name:expr, $redactions:expr) => {{
+        let mut settings: insta::Settings = $test_info.try_into()?;
+        for (selector, redaction) in $redactions.unwrap_or_default() {
+            settings.add_redaction(selector.as_str(), redaction);
+        }
+        let snapshot_name = $snapshot_name;
+        let snapshot_label = snapshot_name.clone();
+        $crate::panic::run_snapshot_assertion(&snapshot_label, || {
+            settings.bind(|| {
+                insta::assert_json_snapshot!(snapshot_name, $res);
+            });
+        })
+    }};
+}
+
 #[pyfunction]
 #[pyo3(signature = (test_info, result, redactions=None))]
 pub fn assert_json_snapshot(
@@ -35,18 +60,7 @@ pub fn assert_json_snapshot(
 ) -> PyResult<()> {
     let res: serde_json::Value = pythonize::depythonize(result)?;
     let snapshot_name = test_info.snapshot_name();
-    let mut settings: insta::Settings = test_info.try_into()?;
-
-    for (selector, redaction) in redactions.unwrap_or_default() {
-        settings.add_redaction(selector.as_str(), redaction);
-    }
-
-    let snapshot_label = snapshot_name.clone();
-    panic::run_snapshot_assertion(&snapshot_label, || {
-        settings.bind(|| {
-            insta::assert_json_snapshot!(snapshot_name, res);
-        });
-    })
+    bind_json_snapshot!(test_info, res, snapshot_name, redactions)
 }
 
 #[pyfunction]
@@ -304,7 +318,9 @@ fn pysnaptest(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(assert_binary_snapshot, m)?)?;
     m.add_function(wrap_pyfunction!(assert_json_snapshot, m)?)?;
     m.add_function(wrap_pyfunction!(assert_csv_snapshot, m)?)?;
-    m.add_function(wrap_pyfunction!(mock_json_snapshot, m)?)?;
+    m.add_function(wrap_pyfunction!(prepare_mock_call, m)?)?;
+    m.add_function(wrap_pyfunction!(assert_json_snapshot_named, m)?)?;
+    m.add_function(wrap_pyfunction!(read_json_snapshot, m)?)?;
     m.add_function(wrap_pyfunction!(accept_pending_snapshot, m)?)?;
     m.add_function(wrap_pyfunction!(reject_pending_snapshot, m)?)?;
     m.add_function(wrap_pyfunction!(print_pending_diff, m)?)?;

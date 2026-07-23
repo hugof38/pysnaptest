@@ -143,6 +143,8 @@ impl SnapshotInfo {
         }
     }
 
+    /// Ticks the shared duplicate counter and returns the assigned snapshot
+    /// name (the base name on first use, `<base>-N` on subsequent uses).
     pub(crate) fn snapshot_name(&self) -> String {
         let mut c = Self::counters();
         let mut test_idx = c.get(&self.snapshot_name).cloned().unwrap_or(0);
@@ -152,6 +154,17 @@ impl SnapshotInfo {
         }
 
         self.snapshot_name_with_idx(test_idx)
+    }
+
+    /// Returns a copy of this `SnapshotInfo` with `suffix` appended to the
+    /// snapshot name (e.g. `<test>_<func_name>` for scoping a mock's request
+    /// and response snapshots). Not exposed to Python: only used internally to
+    /// compose the mock layer's `prepare_mock_call`.
+    pub(crate) fn with_name_suffix(&self, suffix: &str) -> Self {
+        Self {
+            snapshot_name: format!("{}_{}", self.snapshot_name, suffix),
+            ..self.clone()
+        }
     }
 }
 
