@@ -1,18 +1,34 @@
 """Helpers for mocking functions while recording snapshot outputs.
 
-These utilities make it easy to patch or wrap functions so their returned values
-are automatically snapshot tested.
+These utilities make it easy to patch or wrap functions so their returned
+values are automatically snapshot tested.
+
+Deciding whether to actually call the wrapped function, and normalizing rich
+return values (Pydantic models, dataclasses, ...) via `to_jsonable`, happens
+here in Python. But the fiddly snapshot-naming bookkeeping -- scoping a mock's
+name, writing its request snapshot, and peeking its response path *before*
+ticking the shared duplicate counter -- is owned by the Rust
+`prepare_mock_call` primitive, which composes the same `SnapshotInfo` naming
+methods used by the regular JSON snapshot machinery. The remaining two Rust
+primitives, `assert_json_snapshot_named` and `read_json_snapshot`, write and
+read the response snapshot once Python has decided what belongs there.
 """
 
 from __future__ import annotations
 
-from typing import Callable, Dict, Optional, Union
-import importlib
-from unittest.mock import patch
 import functools
+import importlib
+import inspect
+from typing import Callable, Dict, Optional, Union
+from unittest.mock import patch
 
-from ._pysnaptest import mock_json_snapshot as _mock_json_snapshot
+from ._pysnaptest import (
+    assert_json_snapshot_named as _assert_json_snapshot_named,
+    prepare_mock_call as _prepare_mock_call,
+    read_json_snapshot as _read_json_snapshot,
+)
 from .assertion import extract_from_pytest_env
+from .encoders import to_jsonable
 
 
 def mock_json_snapshot(
@@ -24,6 +40,9 @@ def mock_json_snapshot(
     allow_duplicates: bool = False,
 ):
     """Return a function mock that snapshots its JSON result.
+
+    Both synchronous and async def functions are supported: an async func
+    yields an async mock that awaits the real function while recording.
 
     Args:
         func: Function to wrap with snapshot behaviour.
@@ -38,14 +57,48 @@ def mock_json_snapshot(
     """
 
     test_info = extract_from_pytest_env(snapshot_path, snapshot_name, allow_duplicates)
-    return _mock_json_snapshot(func, test_info, record, redactions)
+    suffix = getattr(func, "__name__", "mocked_fn")
+
+    if inspect.iscoroutinefunction(func):
+
+        @functools.wraps(func)
+        async def async_wrapper(*args, **kwargs):
+            request = to_jsonable({"args": list(args), "kwargs": kwargs or None})
+            name, response_path, do_record = _prepare_mock_call(
+                test_info, suffix, request, record, redactions
+            )
+            if do_record:
+                result = await func(*args, **kwargs)
+                _assert_json_snapshot_named(
+                    test_info, to_jsonable(result), name, redactions
+                )
+                return result
+            return _read_json_snapshot(response_path)
+
+        return async_wrapper
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        request = to_jsonable({"args": list(args), "kwargs": kwargs or None})
+        name, response_path, do_record = _prepare_mock_call(
+            test_info, suffix, request, record, redactions
+        )
+        if do_record:
+            result = func(*args, **kwargs)
+            _assert_json_snapshot_named(
+                test_info, to_jsonable(result), name, redactions
+            )
+            return result
+        return _read_json_snapshot(response_path)
+
+    return wrapper
 
 
 def resolve_function(dotted_path: str):
     """Resolve a dotted path to a callable.
 
     Args:
-        dotted_path: ``module.attr`` style path to the target function.
+        dotted_path: module.attr style path to the target function.
 
     Returns:
         Callable: The resolved function object.
@@ -75,7 +128,7 @@ class patch_json_snapshot:
         """Create the patch configuration.
 
         Args:
-            dotted_path: ``module.attr`` style path to patch.
+            dotted_path: module.attr style path to patch.
             record: Whether to always record new snapshots.
             snapshot_path: Optional path override for storing the snapshot.
             snapshot_name: Optional name override for the snapshot file.
@@ -124,6 +177,15 @@ class patch_json_snapshot:
         Returns:
             Callable: Wrapped function that applies the patch during execution.
         """
+
+        if inspect.iscoroutinefunction(func):
+
+            @functools.wraps(func)
+            async def async_wrapper(*args, **kwargs):
+                with self:
+                    return await func(*args, **kwargs)
+
+            return async_wrapper
 
         @functools.wraps(func)
         def wrapper(*args, **kwargs):

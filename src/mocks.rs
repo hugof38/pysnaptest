@@ -1,328 +1,125 @@
-use std::collections::HashMap;
+//! Rust primitives backing the Python mock layer.
+//!
+//! The orchestration for function mocks (deciding whether to actually call the
+//! wrapped function, and Pydantic/dataclass normalization via
+//! `pysnaptest.to_jsonable`) lives in Python (`pysnaptest.mocks`). But the
+//! fiddly, easy-to-get-wrong bookkeeping around snapshot naming -- scoping a
+//! mock's name, peeking its response path *before* ticking the shared
+//! duplicate counter, and deciding record-vs-replay from that path -- is done
+//! once, here, in `prepare_mock_call`, by composing the existing `SnapshotInfo`
+//! naming methods rather than duplicating their logic.
+//!
+//! This module exposes three thin functions to Python:
+//!
+//! * `prepare_mock_call` scopes the snapshot name, writes the request
+//!   snapshot (reusing `crate::bind_json_snapshot`) and returns the response
+//!   snapshot's name/path/record-decision,
+//! * `assert_json_snapshot_named` writes a JSON snapshot under an explicit
+//!   name (also reusing `crate::bind_json_snapshot`), used for the response
+//!   snapshot once the wrapped function has actually been called, and
+//! * `read_json_snapshot` loads a recorded snapshot back into Python (reusing
+//!   insta's own file parser), used to replay a response without calling the
+//!   wrapped function.
+//!
+//! All three live in this module so the on-disk `pysnaptest__mocks__*` filename
+//! prefix (derived from `module_path!()` at the `insta::assert_json_snapshot!`
+//! call site) is preserved.
 
-use insta::assert_json_snapshot as assert_json_snapshot_macro;
+use std::collections::HashMap;
+use std::path::PathBuf;
+
 use insta::internals::SnapshotContents;
 use insta::Snapshot;
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyTuple};
 
-use crate::errors::{SnapError, SnapResult};
 use crate::{RedactionType, SnapshotInfo};
 
-macro_rules! snapshot_fn_auto {
-    ($f:expr $(, $arg:ident )* ; serialize_macro = $serialize_macro:ident ; result_from_str=$result_from_str:expr) => {{
-        let f = $f;
-        let name = stringify!($f);
-        let module_path = module_path!();
-
-        move |$( $arg ),+, info: &SnapshotInfo, redactions: Option<HashMap<String, RedactionType>>, record: bool| -> SnapResult<_> {
-            let finfo = SnapshotInfo {
-                snapshot_name: format!("{}_{}", info.snapshot_name, name),
-                ..info.clone()
-            };
-            let snapshot_path = finfo.next_snapshot_path(Some(module_path.to_string()))?;
-            let snapshot_name = finfo.snapshot_name();
-            let mut settings: insta::Settings = (&finfo).try_into()?;
-
-            for (selector, redaction) in redactions.unwrap_or_default() {
-                settings.add_redaction(selector.as_str(), redaction);
-            }
-
-            // Serialize the input using the passed closure
-            settings.bind(|| {
-                $serialize_macro!(format!("{snapshot_name}-request"), ($( $arg ),+));
-            });
-
-
-            if record || !snapshot_path.exists() {
-                let result = f($( $arg ),+)?;
-                settings.bind(|| {
-                    $serialize_macro!(snapshot_name, result);
-                });
-                Ok(result)
-            } else {
-                match Snapshot::from_file(&snapshot_path)
-                    .map_err(SnapError::insta)?
-                    .contents()
-                {
-                    SnapshotContents::Text(content) => {
-                        Ok(($result_from_str)(content.to_string())?)
-                    },
-                    SnapshotContents::Binary(_) => Err(SnapError::from(
-                        format!(
-                            "Snapshot at {:?} is binary, which is not supported for deserialization",
-                            snapshot_path
-                        ),
-                    )),
-                }
-            }
-        }
-    }};
-}
-
-macro_rules! snapshot_fn_auto_json {
-    ($f:expr $(, $arg:ident )* ; serialize_macro = $serialize_macro:ident ; result_from_str=$result_from_str:expr) => {
-        snapshot_fn_auto!($f $(, $arg )* ; serialize_macro = $serialize_macro ; result_from_str=$result_from_str)
-    };
-
-    ($f:expr $(, $arg:ident )* ) => {
-        snapshot_fn_auto_json!(
-            $f,
-            $( $arg ),+;
-            serialize_macro=assert_json_snapshot_macro;
-            result_from_str=|content: String| serde_json::from_str(&content)
-        )
-    };
-}
-
-macro_rules! assert_json_snapshot_depythonize {
-    ($snapshot_name:expr, ($arg:expr, $kwargs:expr ) ) => {{
-        // Create a tuple of depythonized values
-
-        let rust_args = pythonize::depythonize::<serde_json::Value>($arg as &Bound<PyAny>)
-            .expect(&format!("Failed to depythonize args {:?}", $arg));
-        let rust_kwargs = Option::<&Bound<'_, PyDict>>::map($kwargs, |kw| {
-            pythonize::depythonize::<serde_json::Value>(kw as &Bound<PyAny>)
-                .expect(&format!("Failed to depythonize kwargs {:?}", kw))
-        });
-        let input_json = serde_json::json!({
-            "args": rust_args,
-            "kwargs": rust_kwargs.unwrap_or(serde_json::Value::Null)
-        });
-
-        assert_json_snapshot_macro!($snapshot_name, input_json);
-    }};
-    ($snapshot_name:expr, $arg:expr) => {{
-        Python::with_gil(|py| {
-            let bound: &pyo3::Bound<PyAny> = $arg.bind(py);
-            let input_tuple = pythonize::depythonize::<serde_json::Value>(&bound)
-                .expect(&format!("Failed to depythonize {:?}", $arg));
-            assert_json_snapshot_macro!($snapshot_name, input_tuple);
-        });
-    }};
-}
-
-#[pyclass]
-#[allow(clippy::type_complexity)]
-pub struct PyMockWrapper {
-    pub f: Box<
-        dyn for<'a> Fn(
-                &'a Bound<'_, PyTuple>,
-                Option<&'a Bound<'_, PyDict>>,
-                &'a SnapshotInfo,
-                Option<HashMap<String, RedactionType>>,
-                bool,
-            ) -> SnapResult<Py<PyAny>>
-            + Send
-            + Sync,
-    >,
-    pub snapshot_info: SnapshotInfo,
-    pub record: bool,
-    pub redactions: Option<HashMap<String, RedactionType>>,
-}
-
-#[pymethods]
-impl PyMockWrapper {
-    #[pyo3(signature = (*args, **kwargs))]
-    fn __call__(
-        &self,
-        args: &Bound<'_, PyTuple>,
-        kwargs: Option<&Bound<'_, PyDict>>,
-    ) -> PyResult<PyObject> {
-        (self.f)(
-            args,
-            kwargs,
-            &self.snapshot_info,
-            self.redactions.clone(),
-            self.record,
-        )
-        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
-    }
-}
-
-#[allow(clippy::type_complexity)]
-fn wrap_py_fn_snapshot_json(
-    py_fn: PyObject,
-) -> impl for<'b> Fn(
-    &'b Bound<'_, PyTuple>,
-    Option<&'b Bound<'_, PyDict>>,
-    &'b SnapshotInfo,
-    Option<HashMap<String, RedactionType>>,
-    bool,
-) -> SnapResult<Py<PyAny>>
-       + Send
-       + Sync {
-    move |args: &Bound<'_, PyTuple>,
-          kwargs: Option<&Bound<'_, _>>,
-          info: &SnapshotInfo,
-          redactions: Option<HashMap<String, RedactionType>>,
-          record: bool| {
-        let py_fn_cloned = Python::with_gil(|py| py_fn.clone_ref(py));
-
-        let call_fn = move |args: &Bound<'_, PyTuple>,
-                            kwargs: Option<&Bound<'_, _>>|
-              -> SnapResult<PyObject> {
-            Python::with_gil(|py| py_fn_cloned.call(py, args, kwargs)).map_err(SnapError::from)
-        };
-
-        let wrapped_fn = snapshot_fn_auto_json!(
-            call_fn, args, kwargs;
-            serialize_macro=assert_json_snapshot_depythonize;
-            result_from_str=|content: String| -> SnapResult<PyObject> {
-                Python::with_gil(|py| {
-                    let value: serde_json::Value = serde_json::from_str(&content)?;
-                    let obj = pythonize::pythonize(py, &value).map_err(SnapError::from)?;
-                    Ok(obj.into())
-                })
-            }
-        );
-
-        wrapped_fn(args, kwargs, info, redactions, record)
-    }
-}
-
+/// Scope `test_info` to a mock of `suffix`, write its request snapshot, and
+/// report where/whether the response should be recorded.
+///
+/// Returns `(name, response_path, do_record)`: `name` is the response
+/// snapshot's assigned name (to pass back into `assert_json_snapshot_named`
+/// once the wrapped function has run), `response_path` is its on-disk path,
+/// and `do_record` is `true` when the wrapped function should actually be
+/// called (either `record` was requested, or no response snapshot exists yet).
+///
+/// The response path is deliberately computed via `next_snapshot_path` (a
+/// peek) *before* `snapshot_name` (which ticks the shared duplicate counter);
+/// getting that ordering right is exactly the kind of bookkeeping this
+/// function exists to own on Python's behalf.
 #[pyfunction]
-pub fn mock_json_snapshot(
-    py_fn: PyObject,
-    snapshot_info: SnapshotInfo,
+#[pyo3(signature = (test_info, suffix, request, record, redactions=None))]
+pub fn prepare_mock_call(
+    test_info: &SnapshotInfo,
+    suffix: &str,
+    request: &Bound<'_, PyAny>,
     record: bool,
     redactions: Option<HashMap<String, RedactionType>>,
-) -> PyResult<PyObject> {
-    Python::with_gil(|py| {
-        let callable = Py::new(
-            py,
-            PyMockWrapper {
-                f: Box::new(wrap_py_fn_snapshot_json(py_fn)),
-                snapshot_info,
-                record,
-                redactions,
-            },
-        )?;
-        Ok(callable.into())
-    })
+) -> PyResult<(String, PathBuf, bool)> {
+    let finfo = test_info.with_name_suffix(suffix);
+    let response_path = finfo.next_snapshot_path(Some(module_path!().to_string()))?;
+    let name = finfo.snapshot_name();
+
+    let request_json: serde_json::Value = pythonize::depythonize(request)?;
+    crate::bind_json_snapshot!(
+        test_info,
+        request_json,
+        format!("{name}-request"),
+        redactions
+    )?;
+
+    let do_record = record || !response_path.exists();
+    Ok((name, response_path, do_record))
 }
 
-#[cfg(test)]
-mod tests {
-    use std::collections::HashMap;
+/// Assert a JSON snapshot under an explicit `name`, without ticking the
+/// duplicate counter.
+///
+/// This mirrors `crate::assert_json_snapshot` but takes the snapshot name
+/// directly, which lets the Python mock layer write a mocked call's response
+/// snapshot under the name reserved by `prepare_mock_call`. `result` is
+/// expected to already be JSON-native (the Python side normalizes rich
+/// objects with `pysnaptest.to_jsonable` first).
+#[pyfunction]
+#[pyo3(signature = (test_info, result, name, redactions=None))]
+pub fn assert_json_snapshot_named(
+    test_info: &SnapshotInfo,
+    result: &Bound<'_, PyAny>,
+    name: String,
+    redactions: Option<HashMap<String, RedactionType>>,
+) -> PyResult<()> {
+    let res: serde_json::Value = pythonize::depythonize(result)?;
+    crate::bind_json_snapshot!(test_info, res, name, redactions)
+}
 
-    use crate::{RedactionType, SnapError, SnapResult};
-    use insta::assert_json_snapshot as assert_json_snapshot_macro;
-    use insta::internals::SnapshotContents;
-    use insta::Snapshot;
-    use std::{
-        cell::Cell,
-        ffi::CString,
-        path::{Path, PathBuf},
-        rc::Rc,
-    };
-
-    use pyo3::{
-        types::{PyAnyMethods, PyDict, PyModule, PyTuple},
-        Bound, IntoPyObject, Py, PyAny, PyResult, Python,
-    };
-
-    use crate::{mock_json_snapshot, SnapshotInfo};
-
-    fn snapshot_folder_path() -> PathBuf {
-        // This env var points to the root of your crate during cargo test/build
-        let crate_root = Path::new(env!("CARGO_MANIFEST_DIR"));
-        crate_root.join("src").join("snapshots")
-    }
-
-    #[test]
-    fn test_snapshot_json_or_mock_creates_and_reads_snapshot() -> SnapResult<()> {
-        let input_1 = 4;
-
-        // Shared counter to track how many times the function is called
-        let call_count = Rc::new(Cell::new(0));
-        let call_count_clone = Rc::clone(&call_count);
-
-        let f = |i| {
-            call_count_clone.set(call_count_clone.get() + 1);
-            Ok::<_, SnapError>(i * 2)
-        };
-
-        let snaphot_folder_path = snapshot_folder_path();
-        let snapshot_info = SnapshotInfo {
-            snapshot_folder: snaphot_folder_path,
-            snapshot_name: "test_create_snapshot_fn".to_string(),
-            relative_test_file_path: None,
-            allow_duplicates: true,
-        };
-
-        let snapshot_json_or_mock = snapshot_fn_auto_json!(f, x);
-
-        // First run: record mode, should call the function
-        let result_1: i32 = snapshot_json_or_mock(input_1, &snapshot_info, None, true)?;
-        assert_eq!(result_1, 8);
-        assert_eq!(
-            call_count.get(),
-            1,
-            "Function should have been called once during recording"
-        );
-
-        // Second run: replay mode, should NOT call the function
-        let result_2: i32 = snapshot_json_or_mock(input_1, &snapshot_info, None, false)?;
-        assert_eq!(result_2, 8);
-        assert_eq!(
-            call_count.get(),
-            1,
-            "Function should NOT have been called again during replay"
-        );
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_create_mocked_pyfn_creates_and_reads_snapshot() -> SnapResult<()> {
-        pyo3::prepare_freethreaded_python();
-        let snapshot_info = SnapshotInfo {
-            snapshot_name: "test_create_mocked_pyfn".to_string(),
-            relative_test_file_path: None,
-            allow_duplicates: true,
-            snapshot_folder: snapshot_folder_path(),
-        };
-
-        Python::with_gil(|py| -> PyResult<()> {
-            // Define a Python function with a mutable counter
-            let code = r#"
-counter = {"calls": 0}
-def compute(x):
-    counter["calls"] += 1
-    return {"result": x * 10, "calls": counter["calls"]}
-"#;
-
-            let module = PyModule::from_code(
-                py,
-                CString::new(code)?.as_c_str(),
-                CString::new("testmod.py")?.as_c_str(),
-                CString::new("testmod")?.as_c_str(),
-            )?;
-            let py_fn: Py<PyAny> = module.getattr("compute")?.into_pyobject(py)?.into();
-
-            // Wrap with snapshot function in RECORDING mode
-            let wrapper_obj =
-                mock_json_snapshot(py_fn.clone_ref(py), snapshot_info.clone(), true, None)?;
-            let wrapper = wrapper_obj.bind(py);
-
-            let args = PyTuple::new(py, 7.into_pyobject(py))?;
-
-            let result1: Bound<'_, PyDict> = wrapper.call1(args)?.extract()?;
-            assert_eq!(result1.get_item("result").unwrap().extract::<i32>()?, 70);
-            assert_eq!(result1.get_item("calls").unwrap().extract::<i32>()?, 1);
-
-            let wrapper_obj = mock_json_snapshot(py_fn, snapshot_info.clone(), false, None)?;
-            let wrapper = wrapper_obj.bind(py);
-            let args = PyTuple::new(py, 7.into_pyobject(py))?;
-
-            let result2: Bound<'_, PyDict> = wrapper.call1(args)?.extract()?;
-            assert_eq!(result2.get_item("result").unwrap().extract::<i32>()?, 70);
-            assert_eq!(result2.get_item("calls").unwrap().extract::<i32>()?, 1);
-
-            Ok(())
-        })?;
-
-        Ok(())
+/// Read a previously recorded JSON snapshot file and return its parsed value.
+///
+/// Used by the Python mock layer during replay: the recorded response is loaded
+/// through insta (so the snapshot file format is handled in one place) and
+/// converted back into native Python objects.
+#[pyfunction]
+pub fn read_json_snapshot(snapshot_path: PathBuf) -> PyResult<PyObject> {
+    let snapshot = Snapshot::from_file(&snapshot_path).map_err(|e| {
+        PyValueError::new_err(format!(
+            "Unable to load snapshot from {snapshot_path:?}: {e}"
+        ))
+    })?;
+    match snapshot.contents() {
+        SnapshotContents::Text(content) => Python::with_gil(|py| {
+            let value: serde_json::Value =
+                serde_json::from_str(&content.to_string()).map_err(|e| {
+                    PyValueError::new_err(format!(
+                        "Invalid JSON in snapshot {snapshot_path:?}: {e}"
+                    ))
+                })?;
+            let obj = pythonize::pythonize(py, &value).map_err(|e| {
+                PyValueError::new_err(format!("Failed to convert snapshot to Python: {e}"))
+            })?;
+            Ok(obj.into())
+        }),
+        SnapshotContents::Binary(_) => Err(PyValueError::new_err(format!(
+            "Snapshot at {snapshot_path:?} is binary, which is not supported for mock replay"
+        ))),
     }
 }

@@ -6,7 +6,7 @@ and type checkers can offer completion and validation for the Rust-backed API.
 
 import os
 from pathlib import Path
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
 
 _StrPath = Union[str, os.PathLike[str]]
 _Redactions = dict[str, Union[str, int, None]]
@@ -83,13 +83,28 @@ def assert_snapshot(test_info: SnapshotInfo, result: Any) -> None:
     """Assert that a value matches its stored text snapshot."""
     ...
 
-def mock_json_snapshot(
-    py_fn: Callable[..., Any],
-    snapshot_info: SnapshotInfo,
+def assert_json_snapshot_named(
+    test_info: SnapshotInfo,
+    result: Any,
+    name: str,
+    redactions: Optional[_Redactions] = ...,
+) -> None:
+    """Assert a JSON snapshot under an explicit ``name`` (no counter tick)."""
+    ...
+
+def prepare_mock_call(
+    test_info: SnapshotInfo,
+    suffix: str,
+    request: Any,
     record: bool,
-    redactions: Optional[_Redactions],
-) -> Callable[..., Any]:
-    """Return a callable that snapshots ``py_fn``'s JSON result."""
+    redactions: Optional[_Redactions] = ...,
+) -> tuple[str, Path, bool]:
+    """Scope ``test_info`` to a mock, write its request snapshot, and return
+    ``(name, response_path, do_record)`` for the response."""
+    ...
+
+def read_json_snapshot(snapshot_path: _StrPath) -> Any:
+    """Load a recorded JSON snapshot file and return its parsed value."""
     ...
 
 def accept_pending_snapshot(pending_path: _StrPath) -> Path:
