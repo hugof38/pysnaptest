@@ -68,24 +68,41 @@ fn panic_message(payload: &(dyn Any + Send)) -> Option<String> {
     }
 }
 
-/// Builds the `AssertionError` message for a failed assertion.
+/// Classified result of running an insta snapshot assertion under our guard.
+enum AssertionOutcome {
+    /// The snapshot matched (or was updated).
+    Matched,
+    /// insta's expected mismatch panic fired; insta printed the diff to stdout.
+    Mismatch,
+    /// An unexpected panic (a real bug); carries its surfaced message.
+    Error(String),
+}
+
+/// Runs an insta assertion under the quiet panic hook and classifies the result.
 ///
-/// insta's mismatch panic is `snapshot assertion for '...' failed in line N`,
-/// where the line number points at Rust internals and is noise for a Python
-/// user; that case gets a friendly hint. Any other panic (an unexpected bug)
-/// keeps its original message.
-fn assertion_message(snapshot_name: &str, payload: &(dyn Any + Send)) -> String {
-    let raw = panic_message(payload);
-    if raw
-        .as_deref()
-        .is_some_and(|m| m.starts_with("snapshot assertion for"))
-    {
-        format!(
-            "snapshot '{snapshot_name}' did not match the stored value (see the diff above). \
-             Update the snapshot if this change is intentional."
-        )
-    } else {
-        raw.unwrap_or_else(|| format!("snapshot '{snapshot_name}' assertion failed"))
+/// insta signals a snapshot mismatch by panicking with a message starting
+/// `snapshot assertion for '...'`; that is the one panic we treat as an expected
+/// outcome. Any other panic is an unexpected bug and its message is preserved.
+fn run_assertion<F: FnOnce()>(snapshot_name: &str, assertion: F) -> AssertionOutcome {
+    let guard = AssertionGuard::enter();
+    let outcome = panic::catch_unwind(AssertUnwindSafe(assertion));
+    drop(guard);
+
+    match outcome {
+        Ok(()) => AssertionOutcome::Matched,
+        Err(payload) => {
+            let raw = panic_message(payload.as_ref());
+            if raw
+                .as_deref()
+                .is_some_and(|m| m.starts_with("snapshot assertion for"))
+            {
+                AssertionOutcome::Mismatch
+            } else {
+                AssertionOutcome::Error(
+                    raw.unwrap_or_else(|| format!("snapshot '{snapshot_name}' assertion failed")),
+                )
+            }
+        }
     }
 }
 
@@ -93,15 +110,31 @@ fn assertion_message(snapshot_name: &str, payload: &(dyn Any + Send)) -> String 
 /// panicking) into a Python `AssertionError`. insta prints the diff to stdout
 /// before it panics, so the raised error only needs to say what to do next.
 pub fn run_snapshot_assertion<F: FnOnce()>(snapshot_name: &str, assertion: F) -> PyResult<()> {
-    let guard = AssertionGuard::enter();
-    let outcome = panic::catch_unwind(AssertUnwindSafe(assertion));
-    drop(guard);
-
-    match outcome {
-        Ok(()) => Ok(()),
-        Err(payload) => Err(PyAssertionError::new_err(assertion_message(
-            snapshot_name,
-            payload.as_ref(),
+    match run_assertion(snapshot_name, assertion) {
+        AssertionOutcome::Matched => Ok(()),
+        AssertionOutcome::Mismatch => Err(PyAssertionError::new_err(format!(
+            "snapshot '{snapshot_name}' did not match the stored value (see the diff above). \
+             Update the snapshot if this change is intentional."
         ))),
+        AssertionOutcome::Error(message) => Err(PyAssertionError::new_err(message)),
+    }
+}
+
+/// Runs an insta assertion but reports the outcome as a boolean instead of
+/// raising on a snapshot mismatch.
+///
+/// Returns `Ok(true)` when the snapshot matched (or was updated) and `Ok(false)`
+/// for insta's expected mismatch panic. Any other (unexpected) panic is still
+/// surfaced as a Python `AssertionError`. This lets a caller enrich the failure
+/// (e.g. render a readable CSV/JSON diff for a binary DataFrame snapshot) while
+/// insta still writes its pending `.new` file as usual.
+pub fn run_snapshot_assertion_matched<F: FnOnce()>(
+    snapshot_name: &str,
+    assertion: F,
+) -> PyResult<bool> {
+    match run_assertion(snapshot_name, assertion) {
+        AssertionOutcome::Matched => Ok(true),
+        AssertionOutcome::Mismatch => Ok(false),
+        AssertionOutcome::Error(message) => Err(PyAssertionError::new_err(message)),
     }
 }

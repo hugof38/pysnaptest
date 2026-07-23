@@ -15,6 +15,8 @@ capabilities that peers don't offer out of the box:
   for free — no other Python tool reads and writes insta snapshots.
 - **First-class DataFrame snapshots.** Snapshot pandas or polars `DataFrame`
   objects directly, serialized as CSV, JSON, parquet, or insta's binary format.
+  Large binary DataFrames can store compactly yet still show a readable CSV/JSON
+  diff on mismatch.
 - **Automatic serialization of rich objects.** JSON snapshots normalize Pydantic
   models, dataclasses, enums and common standard-library types (`datetime`,
   `UUID`, `Decimal`, `set`, ...) into JSON automatically — no manual
@@ -133,6 +135,26 @@ assert_json_snapshot(
 
 Pass a `DataFrame` to `assert_dataframe_snapshot`; `assert_json_snapshot` raises
 a `TypeError` for DataFrames.
+
+### Readable diffs for large binary DataFrames
+
+For big datasets, store the snapshot in a compact binary format (`parquet` for
+pandas, `bin` for polars) but still get a human-readable diff when it changes.
+Equality is insta's exact byte comparison of the stored binary; on a mismatch,
+`readable_diff` decompresses the committed snapshot and shows a CSV or JSON diff
+of the two DataFrames:
+
+```python
+assert_dataframe_snapshot(
+    big_df,
+    dataframe_snapshot_format="parquet",  # "bin" for polars
+    readable_diff="csv",                  # or "json"
+)
+```
+
+`readable_diff` defaults to `None`, which keeps the byte-only behavior. It also
+works through the `@snapshot` decorator (`@snapshot(dataframe_snapshot_format=
+"parquet", readable_diff="csv")`).
 
 ### Which API do I use?
 
