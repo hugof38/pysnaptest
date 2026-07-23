@@ -8,8 +8,9 @@ FastAPI's ``jsonable_encoder`` -- that turns Pydantic models, dataclasses,
 enums and common standard-library types into those native structures before
 they cross the boundary.
 
-Detection is intentionally duck-typed so that ``pydantic`` remains an optional,
-unpinned dependency: nothing in this module imports it at module load time.
+Detection avoids importing ``pydantic`` at module load time, so it remains an
+optional, unpinned dependency: the import is performed lazily inside the
+relevant helpers and guarded against ``ImportError``.
 """
 
 from __future__ import annotations
@@ -24,14 +25,17 @@ from typing import Any, Callable, Dict, Optional, Set
 from uuid import UUID
 
 
-def is_pydantic_v2(obj: Any) -> bool:
-    """Check whether ``obj`` is a Pydantic v2 ``BaseModel`` instance.
+def is_pydantic(obj: Any) -> bool:
+    """Check whether ``obj`` is a Pydantic ``BaseModel`` instance.
+
+    Both Pydantic v1 and v2 models are recognised, including models built with
+    Pydantic v2's ``pydantic.v1`` compatibility shim.
 
     Args:
         obj: Object to test.
 
     Returns:
-        bool: ``True`` if ``obj`` is an instance of Pydantic v2's ``BaseModel``.
+        bool: ``True`` if ``obj`` is a Pydantic model instance.
     """
 
     try:
@@ -39,38 +43,34 @@ def is_pydantic_v2(obj: Any) -> bool:
     except ImportError:
         return False
 
-    if not getattr(pydantic, "VERSION", "1").startswith("2"):
-        return False
-
-    return isinstance(obj, pydantic.BaseModel)
-
-
-def is_pydantic_v1(obj: Any) -> bool:
-    """Check whether ``obj`` is a Pydantic v1 ``BaseModel`` instance.
-
-    This also recognises models built with Pydantic v2's ``pydantic.v1``
-    compatibility shim.
-
-    Args:
-        obj: Object to test.
-
-    Returns:
-        bool: ``True`` if ``obj`` is an instance of Pydantic v1's ``BaseModel``.
-    """
-
-    try:
-        import pydantic
-    except ImportError:
-        return False
-
+    bases = [pydantic.BaseModel]
     if getattr(pydantic, "VERSION", "1").startswith("2"):
         try:
-            from pydantic.v1 import BaseModel
-        except ImportError:
-            return False
-        return isinstance(obj, BaseModel)
+            from pydantic.v1 import BaseModel as V1BaseModel
 
-    return isinstance(obj, pydantic.BaseModel)
+            bases.append(V1BaseModel)
+        except ImportError:
+            pass
+
+    return isinstance(obj, tuple(bases))
+
+
+def _pydantic_to_dict(obj: Any) -> Any:
+    """Dump a Pydantic model to a JSON-native ``dict``.
+
+    Uses ``model_dump(mode="json")`` for v2 models and ``.dict()`` for v1 models
+    (including the ``pydantic.v1`` compatibility shim).
+
+    Args:
+        obj: A Pydantic model instance.
+
+    Returns:
+        Any: The model's fields as a ``dict``.
+    """
+
+    if hasattr(obj, "model_dump"):
+        return obj.model_dump(mode="json")
+    return obj.dict()
 
 
 def _is_dataclass_instance(obj: Any) -> bool:
@@ -97,8 +97,7 @@ def is_jsonable_object(obj: Any) -> bool:
     if isinstance(obj, (str, bytes, bytearray)):
         return False
     return (
-        is_pydantic_v2(obj)
-        or is_pydantic_v1(obj)
+        is_pydantic(obj)
         or _is_dataclass_instance(obj)
         or isinstance(obj, (Enum, set, frozenset, tuple, Mapping))
     )
@@ -159,11 +158,8 @@ def to_jsonable(
     def recurse(value: Any) -> Any:
         return to_jsonable(value, custom_encoder=custom_encoder, _seen=_seen)
 
-    if is_pydantic_v2(obj):
-        return recurse(obj.model_dump(mode="json"))
-
-    if is_pydantic_v1(obj):
-        return recurse(obj.dict())
+    if is_pydantic(obj):
+        return recurse(_pydantic_to_dict(obj))
 
     if _is_dataclass_instance(obj):
         return recurse(dataclasses.asdict(obj))
