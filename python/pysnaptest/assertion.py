@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Union, overload
 from functools import partial, wraps
 import asyncio
 import io
+import os
 
 from ._pysnaptest import (
     assert_json_snapshot as _assert_json_snapshot,
@@ -69,6 +70,7 @@ def extract_from_pytest_env(
         snapshot_path_override=snapshot_path,
         snapshot_name_override=snapshot_name,
         allow_duplicates=allow_duplicates,
+        test_file_override=os.environ.get("PYSNAPTEST_TEST_FILE"),
     )
 
 

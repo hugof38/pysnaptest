@@ -53,6 +53,7 @@ function:
 ```python
 from pysnaptest import snapshot
 
+
 @snapshot
 def test_basic():
     return {"hello": "world"}
@@ -62,6 +63,7 @@ You can also assert snapshots directly without using a decorator:
 
 ```python
 from pysnaptest import assert_json_snapshot
+
 
 def test_direct():
     data = {"hello": "world"}
@@ -74,6 +76,7 @@ return value:
 ```python
 from pysnaptest import patch_json_snapshot, snapshot
 from my_project.main import use_http_request
+
 
 @patch_json_snapshot("my_project.main.http_request")
 @snapshot
@@ -94,9 +97,11 @@ from datetime import date
 from pydantic import BaseModel
 from pysnaptest import snapshot
 
+
 class Event(BaseModel):
     name: str
     happened_on: date
+
 
 @snapshot
 def test_events():
@@ -148,7 +153,7 @@ of the two DataFrames:
 assert_dataframe_snapshot(
     big_df,
     dataframe_snapshot_format="parquet",  # "bin" for polars
-    readable_diff="csv",                  # or "json"
+    readable_diff="csv",  # or "json"
 )
 ```
 

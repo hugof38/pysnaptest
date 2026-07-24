@@ -73,6 +73,24 @@ impl PytestInfo {
     pub fn test_path_raw(&self) -> PathBuf {
         Path::new(&self.test_path).to_path_buf()
     }
+
+    /// Resolve the absolute path to the running test's source file.
+    ///
+    /// The path component of `PYTEST_CURRENT_TEST` (exposed here via
+    /// [`Self::test_path_raw`]) is always relative to pytest's *rootdir*, not to
+    /// the process working directory. When pytest supplies the test file's
+    /// absolute path (its plugin reads `item.path`, which pytest guarantees to
+    /// be absolute) we use it directly so snapshot resolution is independent of
+    /// the invocation directory. Only when no such path is available do we fall
+    /// back to the legacy [`Self::test_path`] probing, which is relative to the
+    /// current working directory and therefore correct only when pytest is
+    /// invoked from its rootdir.
+    fn resolve_test_file(&self, test_file: Option<PathBuf>) -> Result<PathBuf, PytestInfoError> {
+        match test_file {
+            Some(path) => Ok(path),
+            None => self.test_path(),
+        }
+    }
 }
 
 impl FromStr for PytestInfo {
@@ -104,23 +122,34 @@ pub struct SnapshotInfo {
     pub(crate) allow_duplicates: bool,
 }
 
-impl TryFrom<PytestInfo> for SnapshotInfo {
-    type Error = PyErr;
-    fn try_from(value: PytestInfo) -> Result<Self, Self::Error> {
-        let test_file_dir = value
-            .test_path()?
+impl SnapshotInfo {
+    /// Build a [`SnapshotInfo`] from the active pytest test.
+    ///
+    /// `test_file`, when provided, is the absolute path to the test's source
+    /// file (supplied by the pytest plugin from `item.path`). The snapshot
+    /// folder is resolved from that file's directory, keeping snapshots next to
+    /// the test regardless of the process working directory. The snapshot name
+    /// and the stored `Test File Path` description remain derived from the
+    /// rootdir-relative `PYTEST_CURRENT_TEST` node id, so committed snapshots
+    /// are unaffected.
+    pub(crate) fn from_pytest_info(
+        info: PytestInfo,
+        test_file: Option<PathBuf>,
+    ) -> Result<Self, PyErr> {
+        let test_file_dir = info
+            .resolve_test_file(test_file)?
             .canonicalize()?
             .parent()
             .ok_or_else(|| {
                 PyValueError::new_err(format!(
                     "Invalid test_path: {:?}, not yielding a parent directory",
-                    value.test_path_raw()
+                    info.test_path_raw()
                 ))
             })?
             .join("snapshots");
 
-        let test_name = &value.test_name;
-        let test_path = value.test_path_raw();
+        let test_name = &info.test_name;
+        let test_path = info.test_path_raw();
         let file_name = test_path.file_stem().and_then(|s| s.to_str());
 
         let name = if let Some(f) = file_name {
@@ -131,13 +160,11 @@ impl TryFrom<PytestInfo> for SnapshotInfo {
         Ok(Self {
             snapshot_folder: test_file_dir,
             snapshot_name: name,
-            relative_test_file_path: Some(value.test_path()?.to_string_lossy().to_string()),
+            relative_test_file_path: Some(info.test_path_raw().to_string_lossy().to_string()),
             allow_duplicates: false,
         })
     }
-}
 
-impl SnapshotInfo {
     pub(crate) fn counters<'a>() -> MutexGuard<'a, BTreeMap<String, usize>> {
         TEST_NAME_COUNTERS.lock().unwrap_or_else(|x| x.into_inner())
     }
@@ -286,6 +313,7 @@ mod tests {
             Some("folder_path_override".into()),
             Some("snapshot_name_override".into()),
             false,
+            None,
         )
         .unwrap();
         insta::assert_debug_snapshot!(snapshot_info);
@@ -295,5 +323,57 @@ mod tests {
         insta::assert_snapshot!(snapshot_info.snapshot_name(), @"snapshot_name_override-2");
         insta::assert_snapshot!(snapshot_info.last_snapshot_name(), @"snapshot_name_override-2");
         insta::assert_snapshot!(snapshot_info.next_snapshot_name(), @"snapshot_name_override-3");
+    }
+
+    /// The snapshot folder must be derived from the *test file's* directory, not
+    /// from the process working directory. When the pytest plugin supplies the
+    /// test file's absolute path, resolution must ignore `current_dir()` and the
+    /// rootdir-relative node id path entirely.
+    #[test]
+    fn test_resolve_uses_absolute_test_file_not_cwd() {
+        let tmp = std::env::temp_dir().join(format!(
+            "pysnaptest_resolve_{}_{}",
+            std::process::id(),
+            line!()
+        ));
+        let test_dir = tmp.join("a").join("b");
+        std::fs::create_dir_all(&test_dir).unwrap();
+        let test_file = test_dir.join("test_thing.py");
+        std::fs::write(&test_file, b"# test").unwrap();
+
+        // A rootdir-relative node id that does NOT exist relative to cwd.
+        let info: PytestInfo = "pkg/nested/test_thing.py::test_a".parse().unwrap();
+        let snapshot_info = SnapshotInfo::from_pytest_info(info, Some(test_file.clone())).unwrap();
+
+        // Folder is next to the real test file, mirroring insta.
+        assert_eq!(
+            snapshot_info.snapshot_folder(),
+            &test_dir.canonicalize().unwrap().join("snapshots")
+        );
+        // Name is still derived from the node id's file stem + test name.
+        assert_eq!(snapshot_info.snapshot_name, "test_thing_test_a");
+        // The stored description keeps the rootdir-relative node id path.
+        assert_eq!(
+            snapshot_info.relative_test_file_path.as_deref(),
+            Some("pkg/nested/test_thing.py")
+        );
+
+        std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    /// A bogus rootdir-relative path that exists neither relative to cwd nor as
+    /// a `./<filename>` fallback must surface an error rather than silently
+    /// resolving to the wrong directory (the pre-fix crash path), when no
+    /// absolute test file is provided.
+    #[test]
+    fn test_resolve_without_test_file_errors_on_missing_path() {
+        let info: PytestInfo = "does/not/exist/anywhere/test_missing.py::test_a"
+            .parse()
+            .unwrap();
+        let result = SnapshotInfo::from_pytest_info(info, None);
+        assert!(
+            result.is_err(),
+            "expected an error when the node-id path cannot be resolved from cwd"
+        );
     }
 }
