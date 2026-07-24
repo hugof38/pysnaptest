@@ -332,11 +332,12 @@ pub fn print_pending_diff(pending_path: PathBuf, workspace_root: Option<PathBuf>
 #[pymethods]
 impl SnapshotInfo {
     #[staticmethod]
-    #[pyo3(signature = (snapshot_path_override = None, snapshot_name_override = None, allow_duplicates = false))]
+    #[pyo3(signature = (snapshot_path_override = None, snapshot_name_override = None, allow_duplicates = false, test_file_override = None))]
     fn from_pytest(
         snapshot_path_override: Option<PathBuf>,
         snapshot_name_override: Option<String>,
         allow_duplicates: bool,
+        test_file_override: Option<PathBuf>,
     ) -> PyResult<Self> {
         Ok(
             if let (Some(snapshot_folder), Some(snapshot_name)) = (
@@ -350,7 +351,8 @@ impl SnapshotInfo {
                     allow_duplicates,
                 }
             } else {
-                let pytest_info: SnapshotInfo = PytestInfo::from_env()?.try_into()?;
+                let pytest_info =
+                    SnapshotInfo::from_pytest_info(PytestInfo::from_env()?, test_file_override)?;
                 Self {
                     snapshot_folder: snapshot_path_override.unwrap_or(pytest_info.snapshot_folder),
                     snapshot_name: snapshot_name_override.map_or(pytest_info.snapshot_name, |v| {

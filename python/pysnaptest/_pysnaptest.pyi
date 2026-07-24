@@ -19,6 +19,7 @@ class SnapshotInfo:
         snapshot_path_override: Optional[_StrPath] = ...,
         snapshot_name_override: Optional[str] = ...,
         allow_duplicates: bool = ...,
+        test_file_override: Optional[_StrPath] = ...,
     ) -> "SnapshotInfo":
         """Build snapshot info from the ``PYTEST_CURRENT_TEST`` environment."""
         ...

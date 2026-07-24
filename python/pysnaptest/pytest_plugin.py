@@ -56,3 +56,19 @@ def pytest_configure(config: "pytest.Config") -> None:
         os.environ["INSTA_UPDATE"] = "always"
     elif config.getoption("--snapshot-new"):
         os.environ["INSTA_UPDATE"] = "new"
+
+
+def pytest_runtest_setup(item: "pytest.Item") -> None:
+    """Record the running test's absolute source-file path.
+
+    pysnaptest's Rust layer otherwise derives the test file location from the
+    rootdir-relative ``PYTEST_CURRENT_TEST`` node id and probes it against the
+    process working directory, which breaks whenever pytest is invoked from a
+    directory other than its rootdir. ``item.path`` is always absolute, so
+    exposing it here keeps snapshot resolution correct regardless of the
+    invocation directory.
+    """
+
+    test_file = getattr(item, "path", None) or getattr(item, "fspath", None)
+    if test_file is not None:
+        os.environ["PYSNAPTEST_TEST_FILE"] = str(test_file)
