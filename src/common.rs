@@ -343,8 +343,7 @@ mod tests {
 
         // A rootdir-relative node id that does NOT exist relative to cwd.
         let info: PytestInfo = "pkg/nested/test_thing.py::test_a".parse().unwrap();
-        let snapshot_info =
-            SnapshotInfo::from_pytest_info(info, Some(test_file.clone())).unwrap();
+        let snapshot_info = SnapshotInfo::from_pytest_info(info, Some(test_file.clone())).unwrap();
 
         // Folder is next to the real test file, mirroring insta.
         assert_eq!(
@@ -368,8 +367,9 @@ mod tests {
     /// absolute test file is provided.
     #[test]
     fn test_resolve_without_test_file_errors_on_missing_path() {
-        let info: PytestInfo =
-            "does/not/exist/anywhere/test_missing.py::test_a".parse().unwrap();
+        let info: PytestInfo = "does/not/exist/anywhere/test_missing.py::test_a"
+            .parse()
+            .unwrap();
         let result = SnapshotInfo::from_pytest_info(info, None);
         assert!(
             result.is_err(),
