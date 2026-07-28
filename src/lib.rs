@@ -316,6 +316,16 @@ pub fn print_pending_diff(pending_path: PathBuf, workspace_root: Option<PathBuf>
         .or_else(|| std::env::var_os("INSTA_WORKSPACE_ROOT").map(PathBuf::from))
         .or_else(|| std::env::current_dir().ok())
         .unwrap_or_else(|| PathBuf::from("."));
+    // insta's `SnapshotPrinter` asserts the workspace root is absolute, so a
+    // relative root (e.g. the CLI's default of ".") would otherwise panic. Anchor
+    // any relative root against the current directory before handing it off.
+    let root = if root.is_absolute() {
+        root
+    } else {
+        std::env::current_dir()
+            .map(|cwd| cwd.join(&root))
+            .unwrap_or(root)
+    };
     let title = new_snapshot
         .snapshot_name()
         .unwrap_or("snapshot")

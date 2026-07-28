@@ -83,7 +83,9 @@ def print_pending_diff(pending_path: str | Path, root: Optional[str] = None) -> 
             ``INSTA_WORKSPACE_ROOT`` if set, otherwise the current directory.
     """
 
-    _print_pending_diff(str(pending_path), str(_root(root)))
+    # insta's diff printer requires an absolute workspace root; the default of
+    # ``.`` (or any relative ``--root``) would otherwise panic in the Rust layer.
+    _print_pending_diff(str(pending_path), str(_root(root).resolve()))
 
 
 def accept_all(root: Optional[str] = None) -> List[Path]:
