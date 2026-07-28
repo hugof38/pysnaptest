@@ -132,3 +132,38 @@ def test_snapshot_update_flag_updates_in_place(tmp_path: Path) -> None:
     assert find_pending_snapshots(str(tmp_path)) == []
     committed = next((tmp_path / "snapshots").glob("*@pysnap.snap"))
     assert "VERSION_B" in committed.read_text()
+
+
+def test_print_pending_diff_relative_root_does_not_panic(tmp_path: Path, capfd) -> None:
+    # A relative workspace root (e.g. the CLI's default of ".") must not reach
+    # insta's `assert!(path.is_absolute())` in the Rust diff printer.
+    accept_pending_snapshot(_make_pending(tmp_path, "VERSION_A"))
+    _write_project(tmp_path, "VERSION_B")
+    _run_pytest(tmp_path, "--snapshot-new")
+    pending = find_pending_snapshots(str(tmp_path))[0]
+
+    print_pending_diff(pending, ".")
+
+    assert "VERSION_B" in capfd.readouterr().out
+
+
+def test_cli_pending_without_root_from_cwd(tmp_path: Path) -> None:
+    # `pysnaptest pending` with no --root defaults root to "." and previously
+    # panicked in the Rust layer; run from the project cwd with a clean env
+    # (no INSTA_WORKSPACE_ROOT) to reproduce that exact invocation.
+    accept_pending_snapshot(_make_pending(tmp_path, "VERSION_A"))
+    _write_project(tmp_path, "VERSION_B")
+    _run_pytest(tmp_path, "--snapshot-new")
+
+    env = {k: v for k, v in os.environ.items() if k != "INSTA_WORKSPACE_ROOT"}
+    result = subprocess.run(
+        [sys.executable, "-m", "pysnaptest", "pending"],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "VERSION_B" in result.stdout
+    assert "1 pending snapshot(s)." in result.stdout
