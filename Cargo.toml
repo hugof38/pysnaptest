@@ -1,6 +1,6 @@
 [package]
 name = "pysnaptest"
-version = "0.6.1"
+version = "0.6.3"
 edition = "2021"
 include = [
     "/pyproject.toml",
